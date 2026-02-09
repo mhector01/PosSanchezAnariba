@@ -1,120 +1,89 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { RowDataPacket } from 'mysql2';
 
 // ---------------------------------------------------------------------
-// 1. GET: OBTENER HISTORIAL DE VENTAS (Con filtros, orden y ediciones)
+// 1. GET: OBTENER HISTORIAL DE VENTAS
 // ---------------------------------------------------------------------
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    
-    // Parámetros de Paginación
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
-    
-    // Parámetros de Filtro y Orden
     const q = searchParams.get('q') || '';
     const orderBy = searchParams.get('orderBy') || 'idventa';
     const orderDir = searchParams.get('orderDir') === 'asc' ? 'ASC' : 'DESC';
 
-    // Validación de seguridad para columnas de ordenamiento (Evitar inyección SQL)
     const allowedColumns = ['idventa', 'fecha_venta', 'cliente', 'nombre_cliente', 'total'];
     const sortColumn = allowedColumns.includes(orderBy) ? orderBy : 'idventa';
-    // Mapeo especial: si el front pide 'nombre_cliente', en la vista es 'cliente'
+    // Mapeo: en la vista la columna es 'cliente'
     const finalSortColumn = sortColumn === 'nombre_cliente' ? 'cliente' : sortColumn;
 
     const connection = await pool.getConnection();
 
-    // Construcción del WHERE
     let whereClause = '';
     let params: any[] = [];
 
     if (q) {
       const term = `%${q}%`;
-      // Buscamos por nombre de cliente o por número de ID/Ticket
-      whereClause = `WHERE (cliente LIKE ? OR idventa LIKE ? OR numero_venta LIKE ?)`;
-      params = [term, term, term];
+      whereClause = `WHERE (cliente LIKE ? OR numero_venta LIKE ?)`;
+      params = [term, term];
     }
 
-    // 1. Contar Total de Registros (Para paginación)
-    // Usamos COUNT(DISTINCT idventa) porque la vista puede traer detalles duplicados
-    const [countRows] = await connection.query<RowDataPacket[]>(
-      `SELECT COUNT(DISTINCT idventa) as total FROM view_ventas ${whereClause}`, 
-      params
+    // Contar
+    const [countRows]: any = await connection.query(
+      `SELECT COUNT(DISTINCT idventa) as total FROM view_ventas ${whereClause}`, params
     );
-    
-    const totalItems = countRows.length > 0 ? countRows[0].total : 0;
+    const totalItems = countRows[0]?.total || 0;
     const totalPages = Math.ceil(totalItems / limit);
 
-    // 2. Obtener Datos (Con conteo de ediciones)
-    // Agregamos limit y offset a los parámetros
+    // Listar
     const queryParams = [...params, limit, offset];
     
-    /* EXPLICACIÓN DE LA CONSULTA:
-       - Seleccionamos los datos principales de la venta.
-       - Usamos una SUB-CONSULTA para contar cuántas veces aparece el ID en 'historial_ediciones'.
-       - Agrupamos por idventa para no traer una fila por cada producto vendido.
-    */
-    const [rows] = await connection.query<RowDataPacket[]>(
-      `SELECT 
-          idventa, 
-          numero_venta, 
-          fecha_venta, 
-          tipo_pago, 
-          cliente as nombre_cliente, 
-          empleado as usuario,
-          total,
-          estado_venta,
-          -- Subconsulta para saber si fue editada
-          (SELECT COUNT(*) FROM historial_ediciones h WHERE h.idventa = view_ventas.idventa) as total_ediciones
-       FROM view_ventas 
-       ${whereClause} 
-       GROUP BY idventa 
-       ORDER BY ${finalSortColumn} ${orderDir} 
-       LIMIT ? OFFSET ?`, 
-      queryParams
-    );
-
-    connection.release();
-
-    return NextResponse.json({
-      data: rows,
-      pagination: {
-        page,
-        limit,
-        totalItems,
-        totalPages
-      }
-    });
+    // Usamos TRY interno en la query por si falla la tabla historial_ediciones
+    try {
+        const [rows] = await connection.query<RowDataPacket[]>(
+          `SELECT 
+              v.idventa, v.numero_venta, v.fecha_venta, v.tipo_pago, 
+              v.cliente as nombre_cliente, v.empleado as usuario, 
+              v.total, v.estado_venta,
+              (SELECT COUNT(*) FROM historial_ediciones h WHERE h.idventa = v.idventa) as total_ediciones
+           FROM view_ventas v
+           ${whereClause} 
+           GROUP BY v.idventa 
+           ORDER BY ${finalSortColumn} ${orderDir} 
+           LIMIT ? OFFSET ?`, 
+          queryParams
+        );
+        connection.release();
+        return NextResponse.json({ data: rows, pagination: { page, limit, totalItems, totalPages } });
+    } catch (innerError) {
+        // Fallback si historial falla: devolvemos ventas sin conteo de ediciones
+        const [rows] = await connection.query<RowDataPacket[]>(
+            `SELECT v.idventa, v.numero_venta, v.fecha_venta, v.tipo_pago, v.cliente as nombre_cliente, 
+             v.empleado as usuario, v.total, v.estado_venta, 0 as total_ediciones
+             FROM view_ventas v ${whereClause} GROUP BY v.idventa ORDER BY ${finalSortColumn} ${orderDir} LIMIT ? OFFSET ?`, 
+            queryParams
+        );
+        connection.release();
+        return NextResponse.json({ data: rows, pagination: { page, limit, totalItems, totalPages } });
+    }
 
   } catch (error: any) {
-    console.error("❌ ERROR GET SALES:", error);
-    return NextResponse.json({ error: 'Error interno: ' + error.message }, { status: 500 });
+    return NextResponse.json({ data: [], pagination: { page: 1, limit: 20, totalItems: 0, totalPages: 0 }, error: error.message });
   }
 }
 
 // ---------------------------------------------------------------------
-// 2. POST: CREAR NUEVA VENTA
-// ---------------------------------------------------------------------
-// ... (GET se mantiene igual) ...
-
-// ---------------------------------------------------------------------
-// 2. POST: CREAR NUEVA VENTA (CORREGIDO)
+// 2. POST: CREAR NUEVA VENTA (USANDO PROCEDIMIENTO)
 // ---------------------------------------------------------------------
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { 
-      cart, 
-      total, 
-      tipo_pago, 
-      pago_efectivo,
-      id_cliente,
-      notas = '',
-      id_usuario,
-      id_comprobante // <--- 1. RECIBIMOS EL ID DEL COMPROBANTE
+      cart, total, tipo_pago, pago_efectivo,
+      id_cliente, notas = '', id_usuario, id_comprobante 
     } = body;
 
     if (!cart || cart.length === 0) {
@@ -126,33 +95,44 @@ export async function POST(request: Request) {
     try {
       await connection.beginTransaction();
 
-      // 2. Insertar Cabecera de Venta
-      // CORRECCIÓN: Cambiamos el '1' fijo por un '?' y pasamos la variable
+      // Cálculos para parámetros del SP
+      const subtotal = Number(total) / 1.15;
+      const iva = Number(total) - subtotal;
+      const cambio = Number(pago_efectivo) - Number(total);
+
+      // --- LLAMADA AL SP (18 Parámetros exactos según tu SQL) ---
+      /* Orden del SP:
+         1.p_tipo_pago, 2.p_tipo_comprobante, 3.p_sumas, 4.p_iva, 5.p_exento, 
+         6.p_retenido, 7.p_descuento, 8.p_total, 9.p_sonletras, 10.p_pago_efectivo, 
+         11.p_pago_tarjeta, 12.p_numero_tarjeta, 13.p_tarjeta_habiente, 14.p_cambio, 
+         15.p_estado, 16.p_idcliente, 17.p_idusuario, 18.p_notas
+      */
       await connection.query(
-        `CALL sp_insert_venta(?, ?, ?, 0, 0, 0, 0, ?, '', ?, 0, '', '', ?, 1, ?, ?, ?)`,
+        `CALL sp_insert_venta(?, ?, ?, ?, 0, 0, 0, ?, '', ?, 0, '', '', ?, 1, ?, ?, ?)`,
         [
-          tipo_pago,                      
-          id_comprobante || 1,            // <--- 2. AQUÍ ESTABA EL ERROR (Antes decía '1' fijo)
-          total,                          
-          total,                          
-          pago_efectivo || total,         
-          (pago_efectivo || total) - total, 
-          id_cliente || 0,                
-          id_usuario || 1,                
-          notas                           
+          tipo_pago,                      // 1
+          id_comprobante || 1,            // 2
+          subtotal,                       // 3
+          iva,                            // 4
+          total,                          // 8
+          pago_efectivo || total,         // 10
+          cambio,                         // 14
+          id_cliente || null,             // 16
+          id_usuario || 1,                // 17
+          notas                           // 18
         ]
       );
-
-      // ... (El resto sigue igual: obtener ID, insertar detalles, finalizar) ...
       
+      // Obtener el ID de la venta recién creada
       const [rows]: any = await connection.query('SELECT MAX(idventa) as id FROM venta');
       const idVenta = rows[0].id;
 
+      // Insertar Detalles
       for (const item of cart) {
-         const fechaVencimiento = item.fecha_vencimiento && item.fecha_vencimiento !== '' 
-            ? item.fecha_vencimiento 
-            : '2000-01-01'; 
+         const fechaVencimiento = item.fecha_vencimiento || null; 
 
+         // Llamada a sp_insert_detalleventa (7 Parámetros)
+         /* 1.idprod, 2.cant, 3.precio, 4.exento, 5.desc, 6.fecha_vence, 7.importe */
          await connection.query(
            `CALL sp_insert_detalleventa(?, ?, ?, 0, 0, ?, ?)`,
            [
@@ -160,11 +140,12 @@ export async function POST(request: Request) {
               item.cantidad, 
               item.precio_numerico, 
               fechaVencimiento,
-              (item.cantidad * item.precio_numerico) 
+              (item.cantidad * item.precio_numerico)
            ]
          );
       }
 
+      // Finalizar venta
       await connection.query('CALL sp_finalizar_venta(?)', [idVenta]);
 
       await connection.commit();

@@ -10,10 +10,9 @@ export async function GET(request: Request, { params }: { params: Params }) {
     const connection = await pool.getConnection();
 
     // 1. Obtener Cabecera con datos Fiscales PRIORIZANDO EL ACTIVO/RECIENTE
-    /* EXPLICACIÓN DEL CAMBIO:
-       Agregamos "ORDER BY tc.activo DESC, tc.idtiraje DESC" en cada subconsulta.
-       Esto asegura que si el número de factura existe en dos rangos (viejo y nuevo),
-       siempre tome los datos del tiraje más actual o el que está activo.
+    /* CORRECCIÓN APLICADA:
+       Se cambió "ORDER BY tc.activo" por "ORDER BY tc.estado".
+       Esto soluciona el error "Unknown column 'tc.activo'".
     */
     const [saleRows] = await connection.query<RowDataPacket[]>(`
       SELECT 
@@ -23,31 +22,31 @@ export async function GET(request: Request, { params }: { params: Params }) {
         (SELECT serie FROM tiraje_comprobante tc 
          WHERE tc.idcomprobante = v.tipo_comprobante 
          AND v.numero_comprobante BETWEEN tc.desde AND tc.hasta 
-         ORDER BY tc.activo DESC, tc.idtiraje DESC 
+         ORDER BY tc.estado DESC, tc.idtiraje DESC 
          LIMIT 1) as serie_autorizada,
         -- CAI
         (SELECT numero_resolucion FROM tiraje_comprobante tc 
          WHERE tc.idcomprobante = v.tipo_comprobante 
          AND v.numero_comprobante BETWEEN tc.desde AND tc.hasta 
-         ORDER BY tc.activo DESC, tc.idtiraje DESC 
+         ORDER BY tc.estado DESC, tc.idtiraje DESC 
          LIMIT 1) as cai_rango,
         -- FECHA LIMITE
         (SELECT fecha_resolucion FROM tiraje_comprobante tc 
          WHERE tc.idcomprobante = v.tipo_comprobante 
          AND v.numero_comprobante BETWEEN tc.desde AND tc.hasta 
-         ORDER BY tc.activo DESC, tc.idtiraje DESC 
+         ORDER BY tc.estado DESC, tc.idtiraje DESC 
          LIMIT 1) as fecha_limite,
         -- RANGO INICIAL
         (SELECT desde FROM tiraje_comprobante tc 
          WHERE tc.idcomprobante = v.tipo_comprobante 
          AND v.numero_comprobante BETWEEN tc.desde AND tc.hasta 
-         ORDER BY tc.activo DESC, tc.idtiraje DESC 
+         ORDER BY tc.estado DESC, tc.idtiraje DESC 
          LIMIT 1) as rango_inicial,
         -- RANGO FINAL
         (SELECT hasta FROM tiraje_comprobante tc 
          WHERE tc.idcomprobante = v.tipo_comprobante 
          AND v.numero_comprobante BETWEEN tc.desde AND tc.hasta 
-         ORDER BY tc.activo DESC, tc.idtiraje DESC 
+         ORDER BY tc.estado DESC, tc.idtiraje DESC 
          LIMIT 1) as rango_final
       FROM view_ventas v
       JOIN comprobante c ON v.tipo_comprobante = c.idcomprobante
@@ -108,10 +107,8 @@ export async function GET(request: Request, { params }: { params: Params }) {
   }
 }
 
-
+// PUT: GUARDAR CAMBIOS DE LA EDICIÓN
 export async function PUT(request: Request, { params }: { params: Params }) {
-    // ... (Usa el código del PUT que te di en la respuesta anterior)
-    // (Por brevedad no lo repito aquí, pero es el que incluye historial y triggers)
     const connection = await pool.getConnection();
     try {
         const { id } = await params;

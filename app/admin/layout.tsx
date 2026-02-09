@@ -11,7 +11,11 @@ import {
   Menu, 
   X, 
   ChevronRight,
-  UserCircle
+  UserCircle,
+  BarChart3,
+  ShoppingCart,
+  Wallet,
+  Settings // <--- 1. Importamos el ícono de engranaje
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -25,10 +29,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.refresh();
   };
 
+  // --- 2. Agregamos el ítem al menú ---
   const menuItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Historial Ventas', href: '/admin/sales', icon: ReceiptText },
     { name: 'Productos', href: '/admin/products', icon: Package },
+    { name: 'Reportes', href: '/admin/reports', icon: BarChart3 }, // <--- NUEVO
+    { name: 'Compras', href: '/admin/purchases', icon: ShoppingCart },
+    { name: 'Caja', href: '/admin/cashbox', icon: Wallet },
+    { name: 'Configuración', href: '/admin/settings', icon: Settings }, // <--- Nuevo item
   ];
 
   const isActive = (path: string) => pathname === path;
@@ -49,7 +58,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           {isSidebarOpen && (
             <div className="ml-4 overflow-hidden whitespace-nowrap animate-fadeIn">
-              <h1 className="font-bold text-white tracking-tight">IVIS SYSTEM</h1>
+              <h1 className="font-bold text-white tracking-tight">Imza POS</h1>
               <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">Admin Control</p>
             </div>
           )}
@@ -127,7 +136,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
             <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.2em]">
-               {pathname === '/admin' ? 'Vista General' : pathname.replace('/admin/', '').split('/')[0]}
+                {/* Lógica simple para mostrar título según ruta */}
+                {pathname === '/admin' ? 'Vista General' : 
+                 pathname === '/admin/settings' ? 'Configuración' : // Caso especial
+                 pathname.replace('/admin/', '').split('/')[0]}
             </h2>
           </div>
           

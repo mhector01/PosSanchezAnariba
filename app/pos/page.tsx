@@ -2,15 +2,25 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Info, X } from 'lucide-react'; // Import icons
 
 // Roles permitidos para editar precios: 1 = Admin, 2 = Gerente
 const ROLES_PERMITIDOS = [1, 2];
+
+// Added description to interface
+interface Producto {
+  idproducto: number;
+  nombre_producto: string;
+  precio_venta: number | string;
+  stock: number;
+  descripcion?: string; // <--- New optional field
+}
 
 export default function POSPage() {
   const router = useRouter();
 
   // --- Estados de Datos ---
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Producto[]>([]); // Typed state
   const [cart, setCart] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   
@@ -18,6 +28,9 @@ export default function POSPage() {
   const [cashboxStatus, setCashboxStatus] = useState<{ isOpen: boolean } | null>(null);
   const [user, setUser] = useState<any>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+
+  // --- New State for Info Modal ---
+  const [infoProduct, setInfoProduct] = useState<Producto | null>(null);
 
   // 1. CARGAR SESIÓN
   useEffect(() => {
@@ -55,8 +68,11 @@ export default function POSPage() {
         .then(res => res.json())
         .then(data => {
           // --- CORRECCIÓN CRÍTICA: Validar que sea un array ---
-          if (Array.isArray(data)) {
-            setProducts(data);
+          // Note: API might return { data: [], pagination: {} } based on previous code, 
+          // so we check data.data if it exists, otherwise data itself.
+          const list = data.data || data; 
+          if (Array.isArray(list)) {
+            setProducts(list);
           } else {
             console.error("La API no devolvió una lista:", data);
             setProducts([]); // Evita que la pantalla explote
@@ -73,9 +89,9 @@ export default function POSPage() {
 
   const addToCart = (product: any) => {
     setCart(prev => {
-      const exists = prev.find(p => p.idproducto === product.idproducto);
+      const exists = prev.find((p: any) => p.idproducto === product.idproducto);
       if (exists) {
-        return prev.map(p => p.idproducto === product.idproducto 
+        return prev.map((p: any) => p.idproducto === product.idproducto 
           ? { ...p, cantidad: p.cantidad + 1 } : p);
       }
       // Inicializamos precio_venta asegurando que sea número
@@ -129,7 +145,7 @@ export default function POSPage() {
 
   // --- INTERFAZ PRINCIPAL DEL POS ---
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans">
+    <div className="flex h-screen bg-gray-100 text-gray-800 font-sans relative">
       
       {/* SECCIÓN IZQUIERDA: PRODUCTOS */}
       <div className="w-2/3 flex flex-col p-4 h-full">
@@ -148,27 +164,46 @@ export default function POSPage() {
         {/* Grid de Productos */}
         <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 overflow-y-auto pr-2 pb-2">
           {products.length > 0 ? (
-            products.map((prod) => (
-              <button
-                key={prod.idproducto}
-                onClick={() => addToCart(prod)}
-                className="bg-white p-3 rounded-xl shadow hover:shadow-lg transition-all flex flex-col items-center justify-between border border-transparent hover:border-blue-500 h-32"
-              >
-                <div className="text-center w-full">
-                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide line-clamp-2 h-8 leading-tight mb-1">
-                    {prod.nombre_producto}
+            products.map((prod) => {
+              const isOutOfStock = prod.stock <= 0;
+              const hasInfo = prod.descripcion && prod.descripcion.trim().length > 0;
+
+              return (
+                <button
+                  key={prod.idproducto}
+                  onClick={() => addToCart(prod)}
+                  className="bg-white p-3 rounded-xl shadow hover:shadow-lg transition-all flex flex-col items-center justify-between border border-transparent hover:border-blue-500 h-32 relative group"
+                >
+                  {/* --- BOTÓN DE INFORMACIÓN --- */}
+                  {hasInfo && (
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation(); // Evita agregar al carrito
+                        setInfoProduct(prod);
+                      }}
+                      className="absolute top-1 right-1 z-10 p-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-all shadow-sm cursor-pointer"
+                      title="Ver Compatibilidad"
+                    >
+                      <Info className="w-4 h-4" />
+                    </div>
+                  )}
+
+                  <div className="text-center w-full mt-2">
+                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide line-clamp-2 h-8 leading-tight mb-1">
+                      {prod.nombre_producto}
+                    </div>
+                    <div className="text-xl font-bold text-blue-700">
+                      L. {Number(prod.precio_venta).toFixed(2)}
+                    </div>
                   </div>
-                  <div className="text-xl font-bold text-blue-700">
-                    L. {Number(prod.precio_venta).toFixed(2)}
+                  <div className="w-full flex justify-between items-end mt-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${prod.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      Stock: {prod.stock}
+                    </span>
                   </div>
-                </div>
-                <div className="w-full flex justify-between items-end mt-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${prod.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    Stock: {prod.stock}
-                  </span>
-                </div>
-              </button>
-            ))
+                </button>
+              );
+            })
           ) : (
             <div className="col-span-full text-center text-gray-400 mt-10">
               No se encontraron productos
@@ -265,6 +300,54 @@ export default function POSPage() {
           </button>
         </div>
       </div>
+
+      {/* --- MODAL DE INFORMACIÓN --- */}
+      {infoProduct && (
+        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-6 rounded-3xl shadow-2xl relative border border-gray-100">
+            <button 
+              onClick={() => setInfoProduct(null)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-red-100 hover:text-red-500 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
+                <Info className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-black text-slate-800 leading-tight px-4">{infoProduct.nombre_producto}</h3>
+              <p className="text-slate-400 text-xs font-mono mt-2 bg-slate-100 inline-block px-3 py-1 rounded-full">
+                ID: {infoProduct.idproducto}
+              </p>
+            </div>
+
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-slate-700 text-sm leading-relaxed whitespace-pre-wrap shadow-inner max-h-60 overflow-y-auto">
+              <span className="font-bold text-slate-800 block mb-2 text-xs uppercase tracking-wider">Compatibilidad / Descripción:</span>
+              {infoProduct.descripcion}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+               <button 
+                onClick={() => setInfoProduct(null)}
+                className="flex-1 py-3 bg-white border border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition"
+              >
+                Cerrar
+              </button>
+              <button 
+                onClick={() => {
+                    addToCart(infoProduct);
+                    setInfoProduct(null);
+                }}
+                className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-200"
+              >
+                Agregar a Venta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

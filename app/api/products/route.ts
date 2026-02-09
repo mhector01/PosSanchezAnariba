@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
-// 1. GET: Buscar Productos
+// 1. GET: Search Products (Updated to include subcategory)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -13,23 +13,43 @@ export async function GET(request: Request) {
 
     const connection = await pool.getConnection();
 
-    let query = 'SELECT * FROM producto';
-    let countQuery = 'SELECT COUNT(*) as total FROM producto';
+    // Base query updated to JOIN with category, subcategory, brand, and presentation
+    let query = `
+      SELECT p.*, 
+             c.nombre_categoria, 
+             sc.nombre_subcategoria, -- <--- Nombre de Subcategoría
+             m.nombre_marca, 
+             pr.nombre_presentacion 
+      FROM producto p
+      LEFT JOIN categoria c ON p.idcategoria = c.idcategoria
+      LEFT JOIN subcategoria sc ON p.idsubcategoria = sc.idsubcategoria -- <--- JOIN con Subcategoría
+      LEFT JOIN marca m ON p.idmarca = m.idmarca
+      LEFT JOIN presentacion pr ON p.idpresentacion = pr.idpresentacion
+    `;
+    
+    let countQuery = 'SELECT COUNT(*) as total FROM producto p';
     let params: any[] = [];
 
     if (q) {
       const term = `%${q}%`;
-      const where = ' WHERE nombre_producto LIKE ? OR codigo_barra LIKE ? OR codigo_interno LIKE ?';
+      const where = ` 
+        WHERE (p.nombre_producto LIKE ? 
+        OR p.codigo_barra LIKE ? 
+        OR p.codigo_interno LIKE ? 
+        OR p.descripcion LIKE ?) 
+      `;
       query += where;
       countQuery += where;
-      params = [term, term, term];
+      params = [term, term, term, term];
     }
 
-    query += ' ORDER BY idproducto DESC LIMIT ? OFFSET ?';
+    query += ' ORDER BY p.idproducto DESC LIMIT ? OFFSET ?';
     
+    // Get total count for pagination
     const [countRows] = await connection.query<RowDataPacket[]>(countQuery, params);
     const total = countRows[0].total;
 
+    // Execute main query
     params.push(limit, offset);
     const [rows] = await connection.query<RowDataPacket[]>(query, params);
 
@@ -48,28 +68,30 @@ export async function GET(request: Request) {
   }
 }
 
-// 2. POST: Crear Nuevo Producto
+// 2. POST: Create New Product (Updated with subcategory)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { 
       codigo_barra, 
       nombre_producto, 
+      descripcion,
       precio_compra, 
       precio_venta, 
       precio_venta_mayoreo,
-      precio_venta_3, // <--- NUEVO CAMPO
+      precio_venta_3, 
       stock, 
       stock_min,
       idcategoria,
-      idmarca,
-      idpresentacion,
-      perecedero
+      idsubcategoria, // <--- New Field
+      idmarca,        
+      idpresentacion, 
+      perecedero      
     } = body;
 
     const connection = await pool.getConnection();
     
-    // Validación de duplicados
+    // Duplicate validation (Barcode)
     if (codigo_barra) {
       const [exist] = await connection.query<RowDataPacket[]>('SELECT idproducto FROM producto WHERE codigo_barra = ?', [codigo_barra]);
       if (exist.length > 0) {
@@ -78,38 +100,39 @@ export async function POST(request: Request) {
       }
     }
 
-    // Insertar usando el SP (si lo actualizaste) o INSERT directo
-    // NOTA: Si ya actualizaste sp_insert_producto en la DB, usa CALL sp_insert_producto(...)
-    // Si no, usa este INSERT directo actualizado:
-    
+    // Direct INSERT with idsubcategoria
     const [res] = await connection.query<ResultSetHeader>(
       `INSERT INTO producto (
         codigo_barra, 
         nombre_producto, 
+        descripcion,       
         precio_compra, 
         precio_venta, 
         precio_venta_mayoreo, 
-        precio_venta_3,  -- <--- COLUMNA NUEVA
+        precio_venta_3,    
         stock, 
         stock_min, 
         idcategoria, 
-        idmarca, 
-        idpresentacion, 
+        idsubcategoria,    -- <--- New Column
+        idmarca,           
+        idpresentacion,    
         estado, 
-        perecedero,
+        perecedero,        
         inventariable
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1)`,
       [
         codigo_barra || null,
         nombre_producto,
+        descripcion || '',            
         precio_compra,
         precio_venta,
-        precio_venta_mayoreo,
-        precio_venta_3 || 0, // <--- VALOR NUEVO (Default 0)
+        precio_venta_mayoreo || 0,
+        precio_venta_3 || 0,          
         stock || 0,
         stock_min || 1,
         idcategoria || 1,
-        idmarca || null,
+        idsubcategoria || 0,          // <--- Default 0 if undefined
+        idmarca || null,              
         idpresentacion || 1,
         perecedero || 0
       ]
@@ -124,7 +147,7 @@ export async function POST(request: Request) {
   }
 }
 
-// 3. PUT: Actualizar Producto
+// 3. PUT: Update Product (Updated with subcategory)
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
@@ -132,16 +155,23 @@ export async function PUT(request: Request) {
       idproducto, 
       codigo_barra, 
       nombre_producto, 
+      descripcion,
       precio_compra,
       precio_venta, 
       precio_venta_mayoreo,
-      precio_venta_3, // <--- NUEVO CAMPO
+      precio_venta_3,
+      stock,          
       stock_min,
       idcategoria,
-      idmarca,
-      idpresentacion,
+      idsubcategoria, // <--- New Field
+      idmarca,        
+      idpresentacion, 
       perecedero
     } = body;
+
+    if (!idproducto) {
+       return NextResponse.json({ error: "ID de producto requerido" }, { status: 400 });
+    }
 
     const connection = await pool.getConnection();
     
@@ -149,28 +179,34 @@ export async function PUT(request: Request) {
       `UPDATE producto SET 
         codigo_barra=?, 
         nombre_producto=?, 
+        descripcion=?,        
         precio_compra=?,
         precio_venta=?, 
         precio_venta_mayoreo=?,
-        precio_venta_3=?, -- <--- COLUMNA NUEVA
+        precio_venta_3=?,     
+        stock=?,              
         stock_min=?,
         idcategoria=?,
-        idmarca=?,
-        idpresentacion=?,
-        perecedero=?
+        idsubcategoria=?,     -- <--- New Column
+        idmarca=?,            
+        idpresentacion=?,     
+        perecedero=?          
        WHERE idproducto=?`,
       [
         codigo_barra, 
         nombre_producto, 
+        descripcion || '',
         precio_compra,
         precio_venta, 
-        precio_venta_mayoreo,
-        precio_venta_3 || 0, // <--- VALOR NUEVO
+        precio_venta_mayoreo || 0,
+        precio_venta_3 || 0,
+        stock,
         stock_min,
         idcategoria,
-        idmarca,
+        idsubcategoria || 0,  // <--- Update value
+        idmarca || null,
         idpresentacion,
-        perecedero,
+        perecedero || 0,
         idproducto
       ]
     );

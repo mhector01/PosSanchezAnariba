@@ -1,16 +1,20 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { Info, X, Filter, ChevronRight } from 'lucide-react'; 
 
 // --- Interfaces ---
 interface Producto {
   idproducto: number;
   nombre_producto: string;
   codigo_barra: string;
+  descripcion?: string; 
   precio_venta: string | number;
   precio_venta_mayoreo: string | number;
   precio_venta_3: string | number;
   stock: string | number;
+  idcategoria: number;     // Necesario para filtrar
+  idsubcategoria?: number; // Necesario para filtrar
 }
 
 interface CartItem extends Producto {
@@ -37,6 +41,10 @@ interface Comprobante {
   disponibles: number;
 }
 
+// Interfaces Nuevas para Filtros
+interface Category { idcategoria: number; nombre_categoria: string; }
+interface Subcategory { idsubcategoria: number; nombre_subcategoria: string; idcategoria: number; }
+
 // ROLES PERMITIDOS
 const ROLES_PERMITIDOS = [1, 2];
 
@@ -44,7 +52,6 @@ export default function POS() {
   const router = useRouter();
   const isProcessing = useRef(false);
   
-  // REFERENCIA PARA EL INPUT DE BÚSQUEDA (SCANNER)
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   // =========================================
@@ -59,10 +66,18 @@ export default function POS() {
   const [cashAmount, setCashAmount] = useState('');
   const [showCloseModal, setShowCloseModal] = useState(false);
 
+  // --- NUEVOS ESTADOS PARA FILTROS ---
   const [products, setProducts] = useState<Producto[]>([]);
+  const [allProducts, setAllProducts] = useState<Producto[]>([]); // Copia de seguridad para filtrar localmente
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [selectedCat, setSelectedCat] = useState<number>(0);
+  const [selectedSubCat, setSelectedSubCat] = useState<number>(0);
+  // -----------------------------------
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customers, setCustomers] = useState<Cliente[]>([]);
-  const [tipoComprobantes, setTipoComprobantes] = useState<Comprobante[]>([]); // New state for receipt types
+  const [tipoComprobantes, setTipoComprobantes] = useState<Comprobante[]>([]); 
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -77,13 +92,15 @@ export default function POS() {
     condicion: 'Contado',
     recibido: '',
     notas: '',
-    idComprobante: 1 // Default to Ticket (ID 1)
+    idComprobante: 1 
   });
 
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<Producto | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(false);
+
+  const [infoProduct, setInfoProduct] = useState<Producto | null>(null);
 
   const total = cart.reduce((sum, item) => sum + (item.cantidad * item.precio_numerico), 0);
   const montoRecibido = parseFloat(paymentForm.recibido) || 0;
@@ -108,47 +125,105 @@ export default function POS() {
         setLoadingSession(false);
         checkRegisterStatus();
         fetchCustomers();
-        // Fetch receipt types
+        fetchCatalogs(); // Cargar categorías al inicio
+        
+        // --- CARGA DE COMPROBANTES CORREGIDA Y ROBUSTA ---
         fetch('/api/settings/comprobantes')
           .then(res => res.json())
-          .then(comprobantes => {
-            setTipoComprobantes(comprobantes);
-            if (comprobantes.length > 0) {
-                // Set default if available, otherwise keep 1
-               setPaymentForm(prev => ({ ...prev, idComprobante: comprobantes[0].idcomprobante }));
+          .then(data => {
+            let lista: Comprobante[] = [];
+            if (Array.isArray(data)) {
+                lista = data;
+            } else if (data && Array.isArray(data.data)) {
+                lista = data.data;
+            } else if (data && Array.isArray(data.rows)) {
+                lista = data.rows; 
+            }
+
+            setTipoComprobantes(lista);
+            if (lista.length > 0) {
+               setPaymentForm(prev => ({ ...prev, idComprobante: lista[0].idcomprobante }));
             }
           })
-          .catch(err => console.error("Error fetching comprobantes", err));
+          .catch(err => {
+             console.error("Error cargando comprobantes:", err);
+             setTipoComprobantes([]); 
+          });
       })
       .catch(() => {
         router.push('/login');
       });
   }, []);
 
-  // Buscador Live (mantiene la lista actualizada visualmente)
+  // Efecto para búsquedas
   useEffect(() => {
     if (isRegisterOpen) {
       const timer = setTimeout(() => {
         setPage(1); 
         fetchProducts(search, 1);
+        // Al buscar texto nuevo, reseteamos filtros de categoría para evitar confusión
+        if(search.length > 0) {
+            setSelectedCat(0);
+            setSelectedSubCat(0);
+        }
       }, 300);
       return () => clearTimeout(timer);
     }
   }, [search, isRegisterOpen]);
 
-  // EFECTO PARA REGRESAR EL FOCO AL CERRAR MODALES
+  // Efecto para Filtrado Local (Categorías/Subcategorías)
   useEffect(() => {
-    if (!showBatchModal && !showPaymentModal && !showCloseModal && !loading) {
-       // Pequeño delay para asegurar que el DOM está listo
+      if (allProducts.length > 0) {
+          let filtered = [...allProducts];
+
+          if (selectedCat > 0) {
+              filtered = filtered.filter(p => p.idcategoria === selectedCat);
+          }
+
+          if (selectedSubCat > 0) {
+              filtered = filtered.filter(p => p.idsubcategoria === selectedSubCat);
+          }
+
+          setProducts(filtered);
+      }
+  }, [selectedCat, selectedSubCat, allProducts]);
+
+  useEffect(() => {
+    if (!showBatchModal && !showPaymentModal && !showCloseModal && !loading && !infoProduct) {
        setTimeout(() => {
          searchInputRef.current?.focus();
        }, 100);
     }
-  }, [showBatchModal, showPaymentModal, showCloseModal, loading]);
+  }, [showBatchModal, showPaymentModal, showCloseModal, loading, infoProduct]);
 
   // =========================================
   // LÓGICA DE NEGOCIO
   // =========================================
+
+  const fetchCatalogs = async () => {
+      try {
+          const [resCat, resSub] = await Promise.all([
+              fetch('/api/categories'),
+              fetch('/api/subcategories')
+          ]);
+          setCategories(await resCat.json());
+          setSubcategories(await resSub.json());
+      } catch (error) { console.error("Error cargando catálogos", error); }
+  };
+
+  const handleCategoryClick = (id: number) => {
+      if (selectedCat === id) {
+          setSelectedCat(0); // Deseleccionar si ya estaba activa
+          setSelectedSubCat(0);
+      } else {
+          setSelectedCat(id);
+          setSelectedSubCat(0); // Reset subcat al cambiar categoria
+      }
+  };
+
+  const handleSubCategoryClick = (id: number) => {
+      setSelectedSubCat(selectedSubCat === id ? 0 : id);
+  };
 
   const handleLogout = async () => {
     document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
@@ -188,18 +263,21 @@ export default function POS() {
   const fetchProducts = async (term: string, pageNum: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/products?q=${term}&page=${pageNum}&limit=24`);
+      // Traemos más productos (limit=100) para permitir filtrado fluido en cliente sin tantas peticiones
+      const res = await fetch(`/api/products?q=${term}&page=${pageNum}&limit=100`);
       const data = await res.json();
       
-      if (data.data && Array.isArray(data.data)) {
-        setProducts(data.data);
-        setTotalPages(data.pagination.totalPages);
-        setTotalItems(data.pagination.total);
-        setPage(data.pagination.currentPage);
-      } else if (Array.isArray(data)) {
-         setProducts(data);
+      const list = data.data || data; 
+      if (Array.isArray(list)) {
+        setAllProducts(list); // Guardamos la lista completa
+        setProducts(list);    // Inicialmente mostramos todo
+        
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalItems(data.pagination?.totalItems || 0);
+        setPage(data.pagination?.currentPage || 1);
       } else {
         setProducts([]);
+        setAllProducts([]);
       }
     } catch (e) { console.error(e); setProducts([]); } finally { setLoading(false); }
   };
@@ -208,7 +286,8 @@ export default function POS() {
     try {
       const res = await fetch('/api/customers');
       const data = await res.json();
-      if (Array.isArray(data)) setCustomers(data);
+      const list = Array.isArray(data) ? data : (data.data || []);
+      if (Array.isArray(list)) setCustomers(list);
     } catch (e) { console.error(e); }
   };
 
@@ -217,7 +296,7 @@ export default function POS() {
     try {
       const res = await fetch(`/api/products/${productId}/batches`);
       const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      return Array.isArray(data) ? data : (data.data || []);
     } catch (e) { return []; } finally { setLoadingBatches(false); }
   };
 
@@ -228,56 +307,43 @@ export default function POS() {
     }
   };
 
-  // --- LÓGICA DE AGREGADO ---
-
   const handleProductClick = async (prod: Producto) => {
     if (Number(prod.stock) <= 0) return alert("⚠️ Producto Agotado");
     
-    // Si el producto es perecedero o tiene lotes, buscar lotes
     const lotes = await fetchBatches(prod.idproducto);
     
     if (lotes.length > 0) {
-      // SI TIENE LOTES: Abrir modal y detener flujo automático
       setCurrentProduct(prod);
       setBatches(lotes);
       setShowBatchModal(true);
     } else {
-      // SI NO TIENE LOTES: Agregar directo
       addToCart(prod, null);
-      
-      // Limpiar buscador y re-enfocar para el siguiente escaneo
       setSearch('');
-      searchInputRef.current?.focus();
+      if(selectedCat === 0) { // Solo enfocar si no estamos navegando con filtros
+          searchInputRef.current?.focus();
+      }
     }
   };
 
-  // --- MANEJO DEL ESCÁNER (ENTER KEY) ---
   const handleScan = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-        e.preventDefault(); // Evitar submit si hubiera form
-        
+        e.preventDefault(); 
         if (!search.trim()) return;
 
-        // 1. Verificar si ya tenemos el resultado único en pantalla (más rápido)
-        // Si el filtro actual muestra exactamente 1 producto, asumimos que es ese
         let targetProduct: Producto | null = null;
 
         if (products.length === 1) {
             targetProduct = products[0];
         } else {
-            // 2. Si hay varios o ninguno, hacemos fetch específico exacto para estar seguros
             try {
-                const res = await fetch(`/api/products?q=${search}&limit=5`); // Buscamos pocos
+                const res = await fetch(`/api/products?q=${search}&limit=5`); 
                 const data = await res.json();
-                const found = data.data || [];
-                
-                // Buscamos coincidencia exacta de código de barra
+                const found = Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
                 const exactMatch = found.find((p: Producto) => p.codigo_barra === search);
                 
                 if (exactMatch) {
                     targetProduct = exactMatch;
                 } else if (found.length === 1) {
-                    // Si solo hay uno (ej: busqueda por nombre muy especifica)
                     targetProduct = found[0];
                 }
             } catch (err) {
@@ -286,13 +352,7 @@ export default function POS() {
         }
 
         if (targetProduct) {
-            // Producto encontrado -> Intentar agregar
             handleProductClick(targetProduct);
-            // handleProductClick ya se encarga de limpiar el search si fue exitoso directo
-        } else {
-            // No encontrado o ambiguo -> No hacer nada, dejar que el usuario seleccione
-            // Opcional: Sonido de error
-            // alert("Producto no encontrado o búsqueda ambigua");
         }
     }
   };
@@ -368,7 +428,7 @@ export default function POS() {
           id_cliente: paymentForm.idCliente,
           notas: paymentForm.notas,
           id_usuario: user?.id,
-          id_comprobante: paymentForm.idComprobante // Send selected receipt type
+          id_comprobante: paymentForm.idComprobante
         })
       });
 
@@ -381,6 +441,14 @@ export default function POS() {
         checkRegisterStatus(); 
         fetchProducts(search, page); 
         
+        fetch('/api/settings/comprobantes')
+          .then(res => res.json())
+          .then(data => {
+             const lista = Array.isArray(data) ? data : (data.data || []);
+             if(Array.isArray(lista)) setTipoComprobantes(lista);
+          })
+          .catch(e => console.error("Error refrescando comprobantes", e));
+
         const width = 400; const height = 600;
         const left = (window.innerWidth - width) / 2;
         const top = (window.innerHeight - height) / 2;
@@ -457,7 +525,58 @@ export default function POS() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .custom-scrollbar::-webkit-scrollbar { height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
       `}</style>
+
+      {/* --- MODAL INFORMACIÓN (REPUESTOS) --- */}
+      {infoProduct && (
+        <div className="absolute inset-0 bg-slate-900/60 z-[70] flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-6 rounded-3xl shadow-2xl relative border border-gray-100">
+            <button 
+              onClick={() => setInfoProduct(null)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-red-100 hover:text-red-500 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
+                <Info className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-black text-slate-800 leading-tight px-4">{infoProduct.nombre_producto}</h3>
+              <p className="text-slate-400 text-xs font-mono mt-2 bg-slate-100 inline-block px-3 py-1 rounded-full">
+                ID: {infoProduct.idproducto}
+              </p>
+            </div>
+
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-slate-700 text-sm leading-relaxed whitespace-pre-wrap shadow-inner max-h-60 overflow-y-auto">
+              <span className="font-bold text-slate-800 block mb-2 text-xs uppercase tracking-wider">Compatibilidad / Detalles:</span>
+              {infoProduct.descripcion || "Sin información adicional."}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+               <button 
+                onClick={() => setInfoProduct(null)}
+                className="flex-1 py-3 bg-white border border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition"
+              >
+                Cerrar
+              </button>
+              <button 
+                onClick={() => {
+                    if (infoProduct) {
+                        handleProductClick(infoProduct); // Llama a la lógica de lotes/vencimiento
+                        setInfoProduct(null);
+                    }
+                }}
+                className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200"
+              >
+                Agregar a Venta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- MODAL LOTE --- */}
       {showBatchModal && currentProduct && (
@@ -519,58 +638,40 @@ export default function POS() {
         </div>
       )}
 
-      {/* --- MODAL PAGO --- */}
+      {/* --- MODAL PAGO (DISEÑO OPTIMIZADO) --- */}
       {showPaymentModal && (
         <div className="absolute inset-0 bg-slate-900/80 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-          <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl overflow-hidden flex flex-col lg:flex-row h-[90vh] lg:h-auto border border-gray-200">
-            <div className="bg-slate-900 text-white p-10 lg:w-1/3 flex flex-col justify-between relative overflow-hidden">
+          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col lg:flex-row max-h-[90vh] border border-gray-200">
+            <div className="bg-slate-900 text-white p-8 lg:w-1/3 flex flex-col justify-between relative overflow-hidden shrink-0">
               <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-indigo-500 rounded-full blur-3xl opacity-20"></div>
               <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-emerald-500 rounded-full blur-3xl opacity-20"></div>
               <div className="relative z-10">
-                <h2 className="text-3xl font-extrabold mb-2 tracking-tight">Resumen</h2>
-                <p className="text-slate-400 text-sm mb-10">Revisa los detalles antes de confirmar.</p>
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center text-slate-300 pb-4 border-b border-slate-700"><span className="text-lg">Artículos</span><span className="text-2xl font-bold text-white">{cart.reduce((s,i)=>s+i.cantidad,0)}</span></div>
-                  <div className="flex flex-col gap-1 pt-2"><span className="text-slate-400 text-sm uppercase tracking-wider">Total a Pagar</span><div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">L. {total.toFixed(2)}</div></div>
+                <h2 className="text-2xl font-extrabold mb-1 tracking-tight">Resumen</h2>
+                <p className="text-slate-400 text-xs mb-8">Revisa los detalles antes de confirmar.</p>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-slate-300 pb-3 border-b border-slate-700"><span className="text-sm">Artículos</span><span className="text-xl font-bold text-white">{cart.reduce((s,i)=>s+i.cantidad,0)}</span></div>
+                  <div className="flex flex-col gap-1 pt-1"><span className="text-slate-400 text-xs uppercase tracking-wider">Total a Pagar</span><div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">L. {total.toFixed(2)}</div></div>
                 </div>
               </div>
-              <div className="mt-10 text-xs text-slate-500 text-center relative z-10">Farmacia IVIS • Sistema POS v2.0</div>
+              <div className="mt-8 text-[10px] text-slate-500 text-center relative z-10">Imza Pos • Sistema POS v2.0</div>
             </div>
-            <div className="p-10 lg:w-2/3 bg-white overflow-y-auto">
-              <div className="flex justify-between items-start mb-8">
-                <div><h2 className="text-2xl font-extrabold text-slate-800">Procesar Pago</h2><p className="text-gray-400 text-sm">Selecciona método y cliente.</p></div>
-                <button onClick={() => setShowPaymentModal(false)} className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition text-xl">✕</button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {/* --- SELECTOR DE COMPROBANTE --- */}
-                <div className="col-span-1">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Tipo Comprobante</label>
-                  <select 
-                    className="w-full p-4 border border-gray-200 rounded-xl bg-gray-50 text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
-                    value={paymentForm.idComprobante}
-                    onChange={(e) => setPaymentForm({...paymentForm, idComprobante: Number(e.target.value)})}
-                  >
-                    {tipoComprobantes.map(tc => (
-                      <option key={tc.idcomprobante} value={tc.idcomprobante}>
-                        {tc.nombre_comprobante} (Prox: #{tc.siguiente_numero})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="col-span-1"><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Cliente</label><select className="w-full p-4 border border-gray-200 rounded-xl bg-gray-50 text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer" value={paymentForm.idCliente} onChange={(e) => setPaymentForm({...paymentForm, idCliente: Number(e.target.value)})}>{customers.map(c => <option key={c.idcliente} value={c.idcliente}>{c.nombre_cliente}</option>)}{customers.length === 0 && <option value="1">Público General</option>}</select></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Método Pago</label><div className="relative"><select className="w-full p-4 border border-gray-200 rounded-xl bg-gray-50 text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer" value={paymentForm.metodoPago} onChange={(e) => setPaymentForm({...paymentForm, metodoPago: e.target.value, recibido: ''})}><option value="Efectivo">💵 Efectivo</option><option value="Tarjeta">💳 Tarjeta</option><option value="Deposito">🏦 Depósito</option></select></div></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Condición</label><select className="w-full p-4 border border-gray-200 rounded-xl bg-gray-50 text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer" value={paymentForm.condicion} onChange={(e) => setPaymentForm({...paymentForm, condicion: e.target.value})}><option value="Contado">Contado</option><option value="Credito">Crédito</option></select></div>
+            <div className="p-6 lg:p-8 lg:w-2/3 bg-white overflow-y-auto custom-scrollbar">
+              <div className="flex justify-between items-start mb-6"><div><h2 className="text-xl font-extrabold text-slate-800">Procesar Pago</h2><p className="text-gray-400 text-xs mt-1">Selecciona método y cliente.</p></div><button onClick={() => setShowPaymentModal(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition text-xl">✕</button></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="col-span-1"><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Tipo Comprobante</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.idComprobante} onChange={(e) => setPaymentForm({...paymentForm, idComprobante: Number(e.target.value)})}>{tipoComprobantes.map(tc => (<option key={tc.idcomprobante} value={tc.idcomprobante}>{tc.nombre_comprobante} (Prox: #{tc.siguiente_numero})</option>))}</select></div>
+                <div className="col-span-1"><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Cliente</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.idCliente} onChange={(e) => setPaymentForm({...paymentForm, idCliente: Number(e.target.value)})}>{customers.map(c => <option key={c.idcliente} value={c.idcliente}>{c.nombre_cliente}</option>)}{customers.length === 0 && <option value="1">Público General</option>}</select></div>
+                <div><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Método Pago</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.metodoPago} onChange={(e) => setPaymentForm({...paymentForm, metodoPago: e.target.value, recibido: ''})}><option value="Efectivo">💵 Efectivo</option><option value="Tarjeta">💳 Tarjeta</option><option value="Deposito">🏦 Depósito</option></select></div>
+                <div><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Condición</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.condicion} onChange={(e) => setPaymentForm({...paymentForm, condicion: e.target.value})}><option value="Contado">Contado</option><option value="Credito">Crédito</option></select></div>
               </div>
               {paymentForm.metodoPago === 'Efectivo' && (
-                <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 mb-8 animate-in fade-in slide-in-from-top-4">
-                   <label className="block text-xs font-bold text-indigo-800 uppercase tracking-wide mb-3">Dinero Recibido</label>
-                   <div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300 font-bold text-2xl">L.</span><input type="number" autoFocus className="w-full p-4 pl-12 text-4xl font-black text-indigo-900 bg-white border-2 border-indigo-200 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-indigo-200" placeholder={total.toFixed(2)} value={paymentForm.recibido} onChange={(e) => setPaymentForm({...paymentForm, recibido: e.target.value})} /></div>
-                   <div className="flex justify-between mt-6 text-lg items-center bg-white p-4 rounded-xl shadow-sm border border-indigo-100"><div className="text-gray-500 font-medium">Cambio a entregar:</div><div className={`font-black text-3xl ${faltante > 0 ? 'text-rose-500' : 'text-emerald-600'}`}>{faltante > 0 ? `Falta L. ${faltante.toFixed(2)}` : `L. ${cambio.toFixed(2)}`}</div></div>
+                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 animate-in fade-in slide-in-from-top-2">
+                   <label className="block text-[10px] font-bold text-indigo-800 uppercase tracking-wide mb-2">Dinero Recibido</label>
+                   <div className="relative mb-3"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 font-bold text-xl">L.</span><input type="number" autoFocus className="w-full p-3 pl-10 text-3xl font-black text-indigo-900 bg-white border-2 border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-indigo-200" placeholder={total.toFixed(2)} value={paymentForm.recibido} onChange={(e) => setPaymentForm({...paymentForm, recibido: e.target.value})} /></div>
+                   <div className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-indigo-100"><div className="text-gray-500 font-medium text-sm">Cambio:</div><div className={`font-black text-xl ${faltante > 0 ? 'text-rose-500' : 'text-emerald-600'}`}>{faltante > 0 ? `Falta L. ${faltante.toFixed(2)}` : `L. ${cambio.toFixed(2)}`}</div></div>
                 </div>
               )}
-              <div className="mb-8"><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Notas (Opcional)</label><textarea className="w-full p-4 border border-gray-200 rounded-xl h-24 outline-none resize-none bg-gray-50 focus:bg-white focus:border-indigo-500 transition-all text-sm" placeholder="Ej. Cliente solicitó factura..." value={paymentForm.notas} onChange={(e) => setPaymentForm({...paymentForm, notas: e.target.value})} /></div>
-              <button onClick={handleFinalizeSale} disabled={loading || (paymentForm.metodoPago === 'Efectivo' && montoRecibido < total)} className={`w-full py-5 rounded-2xl font-extrabold text-xl shadow-xl transition-all transform active:scale-[0.98] flex items-center justify-center gap-3 ${(loading || (paymentForm.metodoPago === 'Efectivo' && montoRecibido < total)) ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-200'}`}>{loading ? (<><div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>PROCESANDO...</>) : (<><span>CONFIRMAR VENTA</span><span>➔</span></>)}</button>
+              <div className="mb-6"><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Notas (Opcional)</label><textarea className="w-full p-3 border border-gray-200 rounded-lg h-20 outline-none resize-none bg-gray-50 focus:bg-white focus:border-indigo-500 transition-all text-sm" placeholder="Ej. Cliente solicitó factura..." value={paymentForm.notas} onChange={(e) => setPaymentForm({...paymentForm, notas: e.target.value})} /></div>
+              <button onClick={handleFinalizeSale} disabled={loading || (paymentForm.metodoPago === 'Efectivo' && montoRecibido < total)} className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 ${(loading || (paymentForm.metodoPago === 'Efectivo' && montoRecibido < total)) ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-200'}`}>{loading ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>PROCESANDO...</>) : (<><span>CONFIRMAR VENTA</span><span>➔</span></>)}</button>
             </div>
           </div>
         </div>
@@ -579,7 +680,7 @@ export default function POS() {
       {/* --- PANEL IZQUIERDO --- */}
       <div className="w-[68%] flex flex-col p-6 h-full">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex flex-col"><h1 className="text-2xl font-black text-slate-800 tracking-tight">Farmacia <span className="text-indigo-600">IVIS</span></h1><p className="text-sm text-slate-400 font-medium">Panel de Venta</p></div>
+          <div className="flex flex-col"><h1 className="text-2xl font-black text-slate-800 tracking-tight">Imza <span className="text-indigo-600">POS</span></h1><p className="text-sm text-slate-400 font-medium">Panel de Venta</p></div>
           <div className="flex gap-3">
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold">{user.name.charAt(0)}</div><div className="text-sm"><p className="font-bold text-slate-700">{user.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{user.tipo_usuario === 1 ? 'Administrador' : 'Vendedor'}</p></div></div>
              <button onClick={() => { checkRegisterStatus().then(() => { setCashAmount(''); setShowCloseModal(true); }); }} className="bg-slate-800 hover:bg-slate-900 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-slate-200 transition-all active:scale-95" title="Corte de Caja"><span>🔒</span> <span className="hidden xl:inline text-sm">Cerrar Caja</span></button>
@@ -587,7 +688,7 @@ export default function POS() {
           </div>
         </div>
 
-        <div className="mb-6 relative group">
+        <div className="mb-4 relative group">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><svg className="w-6 h-6 text-gray-400 group-focus-within:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
           <input 
              ref={searchInputRef}
@@ -602,16 +703,74 @@ export default function POS() {
           />
         </div>
 
+        {/* --- BARRA DE FILTROS (NUEVO) --- */}
+        <div className="mb-4 space-y-3">
+            {/* Categorías */}
+            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                <button 
+                    onClick={() => handleCategoryClick(0)}
+                    className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${selectedCat === 0 ? 'bg-slate-800 text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+                >
+                    Todo
+                </button>
+                {categories.map(cat => (
+                    <button 
+                        key={cat.idcategoria}
+                        onClick={() => handleCategoryClick(cat.idcategoria)}
+                        className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${selectedCat === cat.idcategoria ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'}`}
+                    >
+                        {cat.nombre_categoria}
+                    </button>
+                ))}
+            </div>
+
+            {/* Subcategorías (Se muestra si hay categoría seleccionada y tiene hijos) */}
+            {selectedCat > 0 && subcategories.filter(s => s.idcategoria === selectedCat).length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar animate-in slide-in-from-top-2 fade-in duration-300">
+                    <div className="flex items-center text-slate-400 px-2"><ChevronRight className="w-4 h-4" /></div>
+                    <button 
+                        onClick={() => setSelectedSubCat(0)}
+                        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedSubCat === 0 ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+                    >
+                        Todas
+                    </button>
+                    {subcategories.filter(s => s.idcategoria === selectedCat).map(sub => (
+                        <button 
+                            key={sub.idsubcategoria}
+                            onClick={() => handleSubCategoryClick(sub.idsubcategoria)}
+                            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedSubCat === sub.idsubcategoria ? 'bg-indigo-500 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'}`}
+                        >
+                            {sub.nombre_subcategoria}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+
         <div className="flex-1 overflow-y-auto pr-2 pb-4">
           {loading && <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-400"><div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div><p>Buscando productos...</p></div>}
           {!loading && products.length === 0 && <div className="flex flex-col items-center justify-center h-64 text-slate-400 opacity-60"><span className="text-6xl mb-4">📦</span><p className="text-lg">No se encontraron productos</p></div>}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
             {products.map((prod) => {
               const isOutOfStock = Number(prod.stock) <= 0;
+              const hasInfo = prod.descripcion && prod.descripcion.trim().length > 0;
+
               return (
                 <button key={prod.idproducto} onClick={() => handleProductClick(prod)} disabled={isOutOfStock} className={`group relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-44 text-left transition-all duration-300 ${isOutOfStock ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:-translate-y-1 hover:shadow-xl hover:border-indigo-200'}`}>
+                  {hasInfo && (
+                    <div 
+                        onClick={(e) => {
+                            e.stopPropagation(); 
+                            setInfoProduct(prod);
+                        }}
+                        className="absolute top-2 right-2 z-20 p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                        title="Ver Compatibilidad"
+                    >
+                        <Info className="w-4 h-4" />
+                    </div>
+                  )}
                   <div className="mb-2">
-                    <div className="flex justify-between items-start mb-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-xl shadow-inner text-indigo-500 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">💊</div><span className={`text-[10px] font-bold px-2 py-1 rounded-full ${Number(prod.stock) > 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>Stop: {Number(prod.stock).toFixed(0)}</span></div>
+                    <div className="flex justify-between items-start mb-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-xl shadow-inner text-indigo-500 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">⚙️</div><span className={`text-[10px] font-bold px-2 py-1 rounded-full ${Number(prod.stock) > 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>Stop: {Number(prod.stock).toFixed(0)}</span></div>
                     <h3 className="font-bold text-slate-700 text-sm leading-tight line-clamp-2 group-hover:text-indigo-700 transition-colors">{prod.nombre_producto}</h3>
                     <p className="text-[10px] text-slate-400 mt-1 font-mono">{prod.codigo_barra}</p>
                   </div>
@@ -622,10 +781,14 @@ export default function POS() {
             })}
           </div>
         </div>
-        <div className="mt-4 flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
-           <span className="text-xs font-bold text-slate-400 pl-2">Página {page} de {totalPages} <span className="font-normal opacity-50">({totalItems} productos)</span></span>
-           <div className="flex gap-2"><button onClick={() => handlePageChange(page - 1)} disabled={page === 1} className="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-xl hover:bg-indigo-100 hover:text-indigo-600 disabled:opacity-50 disabled:hover:bg-gray-100 transition-colors">◀</button><button onClick={() => handlePageChange(page + 1)} disabled={page >= totalPages} className="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-xl hover:bg-indigo-100 hover:text-indigo-600 disabled:opacity-50 disabled:hover:bg-gray-100 transition-colors">▶</button></div>
-        </div>
+        
+        {/* Paginación */}
+        {products.length > 0 && totalPages > 1 && (
+            <div className="mt-4 flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+            <span className="text-xs font-bold text-slate-400 pl-2">Página {page} de {totalPages} <span className="font-normal opacity-50">({totalItems} productos)</span></span>
+            <div className="flex gap-2"><button onClick={() => handlePageChange(page - 1)} disabled={page === 1} className="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-xl hover:bg-indigo-100 hover:text-indigo-600 disabled:opacity-50 disabled:hover:bg-gray-100 transition-colors">◀</button><button onClick={() => handlePageChange(page + 1)} disabled={page >= totalPages} className="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-xl hover:bg-indigo-100 hover:text-indigo-600 disabled:opacity-50 disabled:hover:bg-gray-100 transition-colors">▶</button></div>
+            </div>
+        )}
       </div>
 
       {/* --- CARRITO (DERECHA) --- */}
@@ -654,7 +817,6 @@ export default function POS() {
               </div>
 
               <div className="flex items-center justify-between bg-gray-50 rounded-xl p-1">
-                 {/* Stepper */}
                  <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-100">
                     <button onClick={() => updateQuantity(item.idproducto, item.fecha_vencimiento || null, -1)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-l-lg transition font-bold">-</button>
                     <span className="w-8 text-center text-sm font-bold text-slate-800">{item.cantidad}</span>
@@ -662,8 +824,6 @@ export default function POS() {
                  </div>
 
                  <div className="flex flex-col items-end px-2">
-                    
-                    {/* --- SELECTOR DE PRECIOS MEJORADO --- */}
                     <div className="flex gap-1 mb-1">
                         <button 
                             onClick={() => updatePrice(item.idproducto, item.fecha_vencimiento || null, item.precio_venta)}
