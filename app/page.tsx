@@ -770,7 +770,7 @@ export default function POS() {
                     </div>
                   )}
                   <div className="mb-2">
-                    <div className="flex justify-between items-start mb-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-xl shadow-inner text-indigo-500 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">⚙️</div><span className={`text-[10px] font-bold px-2 py-1 rounded-full ${Number(prod.stock) > 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>Stop: {Number(prod.stock).toFixed(0)}</span></div>
+                    <div className="flex justify-between items-start mb-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-xl shadow-inner text-indigo-500 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">⚙️</div><span className={`text-[10px] font-bold px-2 py-1 rounded-full ${Number(prod.stock) > 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>Stok: {Number(prod.stock).toFixed(0)}</span></div>
                     <h3 className="font-bold text-slate-700 text-sm leading-tight line-clamp-2 group-hover:text-indigo-700 transition-colors">{prod.nombre_producto}</h3>
                     <p className="text-[10px] text-slate-400 mt-1 font-mono">{prod.codigo_barra}</p>
                   </div>
