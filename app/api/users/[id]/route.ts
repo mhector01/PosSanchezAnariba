@@ -1,21 +1,28 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+// En Next.js reciente, 'params' es una Promesa
+export async function DELETE(
+  request: Request, 
+  { params }: { params: Promise<{ id: string }> } 
+) {
   try {
-    const idUsuario = params.id;
+    // 1. Esperamos a que se resuelvan los parámetros
+    const { id } = await params;
+    const idUsuario = id;
+
     const connection = await pool.getConnection();
 
-    // 1. Obtener ID del empleado asociado
+    // 2. Obtener ID del empleado asociado
     const [rows]: any = await connection.query('SELECT idempleado FROM usuario WHERE idusuario = ?', [idUsuario]);
     
     if (rows.length > 0) {
         const idEmpleado = rows[0].idempleado;
         
-        // 2. Desactivar Usuario
+        // 3. Desactivar Usuario
         await connection.query('UPDATE usuario SET estado = 0 WHERE idusuario = ?', [idUsuario]);
         
-        // 3. Desactivar Empleado (Opcional, depende de tu lógica de negocio, aquí lo hacemos para ser consistentes)
+        // 4. Desactivar Empleado
         await connection.query('UPDATE empleado SET estado = 0 WHERE idempleado = ?', [idEmpleado]);
     }
 
