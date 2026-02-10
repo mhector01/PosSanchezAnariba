@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Info, X, Filter, ChevronRight } from 'lucide-react'; 
+import { Info, X, ChevronRight, LayoutDashboard } from 'lucide-react'; // Agregamos icono Dashboard
+import { useAuth } from '@/context/AuthContext';
 
 // --- Interfaces ---
 interface Producto {
@@ -13,8 +14,8 @@ interface Producto {
   precio_venta_mayoreo: string | number;
   precio_venta_3: string | number;
   stock: string | number;
-  idcategoria: number;     // Necesario para filtrar
-  idsubcategoria?: number; // Necesario para filtrar
+  idcategoria: number;
+  idsubcategoria?: number;
 }
 
 interface CartItem extends Producto {
@@ -41,19 +42,19 @@ interface Comprobante {
   disponibles: number;
 }
 
-// Interfaces Nuevas para Filtros
 interface Category { idcategoria: number; nombre_categoria: string; }
 interface Subcategory { idsubcategoria: number; nombre_subcategoria: string; idcategoria: number; }
 
-// ROLES PERMITIDOS
-const ROLES_PERMITIDOS = [1, 2];
+// Solo el ADMIN (1) puede editar precios manualmente
+const ROLES_PERMITIDOS = [1];
 
 export default function POS() {
   const router = useRouter();
   const isProcessing = useRef(false);
-  
   const searchInputRef = useRef<HTMLInputElement>(null);
   
+  const { setUser: setAuthUser, logout } = useAuth();
+
   // =========================================
   // ESTADOS
   // =========================================
@@ -66,14 +67,13 @@ export default function POS() {
   const [cashAmount, setCashAmount] = useState('');
   const [showCloseModal, setShowCloseModal] = useState(false);
 
-  // --- NUEVOS ESTADOS PARA FILTROS ---
+  // Filtros
   const [products, setProducts] = useState<Producto[]>([]);
-  const [allProducts, setAllProducts] = useState<Producto[]>([]); // Copia de seguridad para filtrar localmente
+  const [allProducts, setAllProducts] = useState<Producto[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedCat, setSelectedCat] = useState<number>(0);
   const [selectedSubCat, setSelectedSubCat] = useState<number>(0);
-  // -----------------------------------
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customers, setCustomers] = useState<Cliente[]>([]);
@@ -115,30 +115,44 @@ export default function POS() {
   // =========================================
 
   useEffect(() => {
+    // 1. Verificación rápida local (Opcional, solo para UX)
+    const savedUser = localStorage.getItem('pos_user');
+    
     fetch('/api/auth/session')
       .then(res => {
         if (!res.ok) throw new Error('No autorizado');
         return res.json();
       })
       .then(data => {
-        setUser(data.user);
+        const userData = data.user;
+        
+        // --- CORRECCIÓN: ELIMINADA LA REDIRECCIÓN FORZADA DEL ADMIN ---
+        // Ahora el Admin puede entrar aquí sin problemas.
+        
+        setUser(userData);
+        
+        // Sincronizamos con Contexto Global para que el AdminLayout funcione si navegas allá
+        const sessionData = {
+            idusuario: userData.id,
+            nombre: userData.name,
+            tipo_usuario: userData.tipo_usuario
+        };
+        localStorage.setItem('pos_user', JSON.stringify(sessionData));
+        setAuthUser(sessionData);
+
         setLoadingSession(false);
         checkRegisterStatus();
         fetchCustomers();
-        fetchCatalogs(); // Cargar categorías al inicio
+        fetchCatalogs();
         
-        // --- CARGA DE COMPROBANTES CORREGIDA Y ROBUSTA ---
+        // Carga de comprobantes
         fetch('/api/settings/comprobantes')
           .then(res => res.json())
           .then(data => {
             let lista: Comprobante[] = [];
-            if (Array.isArray(data)) {
-                lista = data;
-            } else if (data && Array.isArray(data.data)) {
-                lista = data.data;
-            } else if (data && Array.isArray(data.rows)) {
-                lista = data.rows; 
-            }
+            if (Array.isArray(data)) lista = data;
+            else if (data && Array.isArray(data.data)) lista = data.data;
+            else if (data && Array.isArray(data.rows)) lista = data.rows; 
 
             setTipoComprobantes(lista);
             if (lista.length > 0) {
@@ -146,22 +160,22 @@ export default function POS() {
             }
           })
           .catch(err => {
-             console.error("Error cargando comprobantes:", err);
+             console.error("Error comprobantes:", err);
              setTipoComprobantes([]); 
           });
       })
       .catch(() => {
-        router.push('/login');
+        localStorage.removeItem('pos_user');
+        window.location.href = '/login';
       });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Efecto para búsquedas
+  // Efecto búsqueda
   useEffect(() => {
     if (isRegisterOpen) {
       const timer = setTimeout(() => {
         setPage(1); 
         fetchProducts(search, 1);
-        // Al buscar texto nuevo, reseteamos filtros de categoría para evitar confusión
         if(search.length > 0) {
             setSelectedCat(0);
             setSelectedSubCat(0);
@@ -171,33 +185,25 @@ export default function POS() {
     }
   }, [search, isRegisterOpen]);
 
-  // Efecto para Filtrado Local (Categorías/Subcategorías)
+  // Efecto Filtros Locales
   useEffect(() => {
       if (allProducts.length > 0) {
           let filtered = [...allProducts];
-
-          if (selectedCat > 0) {
-              filtered = filtered.filter(p => p.idcategoria === selectedCat);
-          }
-
-          if (selectedSubCat > 0) {
-              filtered = filtered.filter(p => p.idsubcategoria === selectedSubCat);
-          }
-
+          if (selectedCat > 0) filtered = filtered.filter(p => p.idcategoria === selectedCat);
+          if (selectedSubCat > 0) filtered = filtered.filter(p => p.idsubcategoria === selectedSubCat);
           setProducts(filtered);
       }
   }, [selectedCat, selectedSubCat, allProducts]);
 
+  // Focus automático
   useEffect(() => {
     if (!showBatchModal && !showPaymentModal && !showCloseModal && !loading && !infoProduct) {
-       setTimeout(() => {
-         searchInputRef.current?.focus();
-       }, 100);
+       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
   }, [showBatchModal, showPaymentModal, showCloseModal, loading, infoProduct]);
 
   // =========================================
-  // LÓGICA DE NEGOCIO
+  // LÓGICA
   // =========================================
 
   const fetchCatalogs = async () => {
@@ -208,16 +214,16 @@ export default function POS() {
           ]);
           setCategories(await resCat.json());
           setSubcategories(await resSub.json());
-      } catch (error) { console.error("Error cargando catálogos", error); }
+      } catch (error) { console.error("Error catálogos", error); }
   };
 
   const handleCategoryClick = (id: number) => {
       if (selectedCat === id) {
-          setSelectedCat(0); // Deseleccionar si ya estaba activa
+          setSelectedCat(0); 
           setSelectedSubCat(0);
       } else {
           setSelectedCat(id);
-          setSelectedSubCat(0); // Reset subcat al cambiar categoria
+          setSelectedSubCat(0); 
       }
   };
 
@@ -225,9 +231,10 @@ export default function POS() {
       setSelectedSubCat(selectedSubCat === id ? 0 : id);
   };
 
-  const handleLogout = async () => {
-    document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-    window.location.href = '/login';
+  const onLogoutClick = () => {
+    if(confirm("¿Seguro deseas salir y cerrar sesión?")) {
+        logout(); 
+    }
   };
 
   const checkRegisterStatus = async () => {
@@ -243,7 +250,7 @@ export default function POS() {
   };
 
   const handleRegisterAction = async (action: 'open' | 'close') => {
-    if (!cashAmount) return alert("Por favor ingresa un monto.");
+    if (!cashAmount) return alert("Ingresa un monto.");
     try {
       const res = await fetch('/api/cashbox', {
         method: 'POST',
@@ -252,32 +259,28 @@ export default function POS() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert(data.message || 'Operación exitosa');
+        alert(data.message || 'Éxito');
         setCashAmount('');
         setShowCloseModal(false);
         checkRegisterStatus();
       } else alert(data.error);
-    } catch (e) { alert("Error de conexión"); }
+    } catch (e) { alert("Error conexión"); }
   };
 
   const fetchProducts = async (term: string, pageNum: number) => {
     setLoading(true);
     try {
-      // Traemos más productos (limit=100) para permitir filtrado fluido en cliente sin tantas peticiones
       const res = await fetch(`/api/products?q=${term}&page=${pageNum}&limit=100`);
       const data = await res.json();
-      
       const list = data.data || data; 
       if (Array.isArray(list)) {
-        setAllProducts(list); // Guardamos la lista completa
-        setProducts(list);    // Inicialmente mostramos todo
-        
+        setAllProducts(list); 
+        setProducts(list);
         setTotalPages(data.pagination?.totalPages || 1);
         setTotalItems(data.pagination?.totalItems || 0);
         setPage(data.pagination?.currentPage || 1);
       } else {
-        setProducts([]);
-        setAllProducts([]);
+        setProducts([]); setAllProducts([]);
       }
     } catch (e) { console.error(e); setProducts([]); } finally { setLoading(false); }
   };
@@ -308,10 +311,8 @@ export default function POS() {
   };
 
   const handleProductClick = async (prod: Producto) => {
-    if (Number(prod.stock) <= 0) return alert("⚠️ Producto Agotado");
-    
+    if (Number(prod.stock) <= 0) return alert("⚠️ Agotado");
     const lotes = await fetchBatches(prod.idproducto);
-    
     if (lotes.length > 0) {
       setCurrentProduct(prod);
       setBatches(lotes);
@@ -319,9 +320,7 @@ export default function POS() {
     } else {
       addToCart(prod, null);
       setSearch('');
-      if(selectedCat === 0) { // Solo enfocar si no estamos navegando con filtros
-          searchInputRef.current?.focus();
-      }
+      if(selectedCat === 0) searchInputRef.current?.focus();
     }
   };
 
@@ -329,31 +328,19 @@ export default function POS() {
     if (e.key === 'Enter') {
         e.preventDefault(); 
         if (!search.trim()) return;
-
         let targetProduct: Producto | null = null;
-
-        if (products.length === 1) {
-            targetProduct = products[0];
-        } else {
+        if (products.length === 1) targetProduct = products[0];
+        else {
             try {
                 const res = await fetch(`/api/products?q=${search}&limit=5`); 
                 const data = await res.json();
                 const found = Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
                 const exactMatch = found.find((p: Producto) => p.codigo_barra === search);
-                
-                if (exactMatch) {
-                    targetProduct = exactMatch;
-                } else if (found.length === 1) {
-                    targetProduct = found[0];
-                }
-            } catch (err) {
-                console.error("Error buscando producto al escanear", err);
-            }
+                if (exactMatch) targetProduct = exactMatch;
+                else if (found.length === 1) targetProduct = found[0];
+            } catch (err) { console.error(err); }
         }
-
-        if (targetProduct) {
-            handleProductClick(targetProduct);
-        }
+        if (targetProduct) handleProductClick(targetProduct);
     }
   };
 
@@ -367,8 +354,7 @@ export default function POS() {
       }
       return [...prev, { ...prod, cantidad: 1, precio_numerico: Number(prod.precio_venta), fecha_vencimiento: fecha }];
     });
-    setShowBatchModal(false);
-    setCurrentProduct(null);
+    setShowBatchModal(false); setCurrentProduct(null);
   };
 
   const updateQuantity = (id: number, fecha: string | null, delta: number) => {
@@ -386,11 +372,8 @@ export default function POS() {
   const updatePrice = (id: number, fecha: string | null, newPrice: number | string) => {
     const price = Number(newPrice);
     if (isNaN(price) || price < 0) return;
-
     setCart(prev => prev.map(item => {
-        if (item.idproducto === id && item.fecha_vencimiento === fecha) {
-            return { ...item, precio_numerico: price };
-        }
+        if (item.idproducto === id && item.fecha_vencimiento === fecha) return { ...item, precio_numerico: price };
         return item;
     }));
   };
@@ -402,13 +385,11 @@ export default function POS() {
   const handleFinalizeSale = async () => {
     if (isProcessing.current) return;
     if (paymentForm.metodoPago === 'Efectivo' && montoRecibido < total) {
-      alert(`⚠️ Faltan L. ${faltante.toFixed(2)} para cubrir el total.`);
+      alert(`⚠️ Faltan L. ${faltante.toFixed(2)}`);
       return;
     }
-
     isProcessing.current = true;
     setLoading(true);
-
     try {
       const cartToSend = cart.map(i => ({
         idproducto: i.idproducto,
@@ -416,7 +397,6 @@ export default function POS() {
         precio_numerico: i.precio_numerico,
         fecha_vencimiento: i.fecha_vencimiento
       }));
-
       const res = await fetch('/api/sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -431,37 +411,24 @@ export default function POS() {
           id_comprobante: paymentForm.idComprobante
         })
       });
-
       const data = await res.json();
-
       if (res.ok) {
         setShowPaymentModal(false);
         setCart([]);
         setPaymentForm(prev => ({ ...prev, recibido: '', notas: '' }));
         checkRegisterStatus(); 
         fetchProducts(search, page); 
-        
-        fetch('/api/settings/comprobantes')
-          .then(res => res.json())
-          .then(data => {
+        fetch('/api/settings/comprobantes').then(res=>res.json()).then(data=>{
              const lista = Array.isArray(data) ? data : (data.data || []);
              if(Array.isArray(lista)) setTipoComprobantes(lista);
-          })
-          .catch(e => console.error("Error refrescando comprobantes", e));
-
+        });
         const width = 400; const height = 600;
         const left = (window.innerWidth - width) / 2;
         const top = (window.innerHeight - height) / 2;
         window.open(`/ticket/${data.id_venta}`, 'TicketVenta', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`);
-
-      } else {
-        alert(`❌ Error: ${data.error}`);
-      }
-    } catch (e) {
-      alert("Error de conexión con el servidor");
-    } finally {
-      setLoading(false);
-      setTimeout(() => { isProcessing.current = false; }, 1000);
+      } else alert(`❌ Error: ${data.error}`);
+    } catch (e) { alert("Error conexión"); } finally {
+      setLoading(false); setTimeout(() => { isProcessing.current = false; }, 1000);
     }
   };
 
@@ -480,38 +447,21 @@ export default function POS() {
 
   if (!user) return null; 
 
-  if (isRegisterOpen === null) return (
-    <div className="h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium">
-      Verificando estado de caja...
-    </div>
-  );
+  if (isRegisterOpen === null) return <div className="h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium">Verificando caja...</div>;
 
   // --- APERTURA ---
   if (isRegisterOpen === false) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4 font-sans">
         <div className="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md text-center transform transition-all hover:scale-[1.01] duration-500">
-          <div className="bg-indigo-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-            <span className="text-5xl">🏪</span>
-          </div>
+          <div className="bg-indigo-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><span className="text-5xl">🏪</span></div>
           <h1 className="text-3xl font-extrabold text-slate-800 mb-2 tracking-tight">Apertura de Caja</h1>
-          <div className="text-slate-500 mb-8 bg-slate-50 py-2 px-4 rounded-full inline-block text-sm border border-slate-100">
-            Usuario: <span className="font-bold text-indigo-600">{user.name}</span>
-          </div>
+          <div className="text-slate-500 mb-8 bg-slate-50 py-2 px-4 rounded-full inline-block text-sm border border-slate-100">Usuario: <span className="font-bold text-indigo-600">{user.name}</span></div>
           <div className="relative mb-8">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xl">L.</span>
-            <input 
-              type="number" 
-              className="w-full p-5 pl-10 border-2 border-slate-100 rounded-2xl text-3xl font-bold text-center text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-300"
-              placeholder="0.00"
-              value={cashAmount}
-              onChange={(e) => setCashAmount(e.target.value)}
-              autoFocus
-            />
+            <input type="number" className="w-full p-5 pl-10 border-2 border-slate-100 rounded-2xl text-3xl font-bold text-center text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-300" placeholder="0.00" value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} autoFocus />
           </div>
-          <button onClick={() => handleRegisterAction('open')} className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 transform active:scale-95 transition-all">
-            INICIAR TURNO
-          </button>
+          <button onClick={() => handleRegisterAction('open')} className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 transform active:scale-95 transition-all">INICIAR TURNO</button>
         </div>
       </div>
     );
@@ -529,50 +479,24 @@ export default function POS() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
       `}</style>
 
-      {/* --- MODAL INFORMACIÓN (REPUESTOS) --- */}
+      {/* ... (Modales de info y lote igual que antes) ... */}
+      {/* (Para ahorrar espacio aquí, asumo que mantienes los modales de Info, Lote, Corte y Pago igual) */}
       {infoProduct && (
         <div className="absolute inset-0 bg-slate-900/60 z-[70] flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-md p-6 rounded-3xl shadow-2xl relative border border-gray-100">
-            <button 
-              onClick={() => setInfoProduct(null)}
-              className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-red-100 hover:text-red-500 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            
+            <button onClick={() => setInfoProduct(null)} className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-red-100 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
             <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
-                <Info className="w-8 h-8" />
-              </div>
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100"><Info className="w-8 h-8" /></div>
               <h3 className="text-xl font-black text-slate-800 leading-tight px-4">{infoProduct.nombre_producto}</h3>
-              <p className="text-slate-400 text-xs font-mono mt-2 bg-slate-100 inline-block px-3 py-1 rounded-full">
-                ID: {infoProduct.idproducto}
-              </p>
+              <p className="text-slate-400 text-xs font-mono mt-2 bg-slate-100 inline-block px-3 py-1 rounded-full">ID: {infoProduct.idproducto}</p>
             </div>
-
             <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-slate-700 text-sm leading-relaxed whitespace-pre-wrap shadow-inner max-h-60 overflow-y-auto">
               <span className="font-bold text-slate-800 block mb-2 text-xs uppercase tracking-wider">Compatibilidad / Detalles:</span>
               {infoProduct.descripcion || "Sin información adicional."}
             </div>
-
             <div className="flex gap-3 mt-6">
-               <button 
-                onClick={() => setInfoProduct(null)}
-                className="flex-1 py-3 bg-white border border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition"
-              >
-                Cerrar
-              </button>
-              <button 
-                onClick={() => {
-                    if (infoProduct) {
-                        handleProductClick(infoProduct); // Llama a la lógica de lotes/vencimiento
-                        setInfoProduct(null);
-                    }
-                }}
-                className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200"
-              >
-                Agregar a Venta
-              </button>
+               <button onClick={() => setInfoProduct(null)} className="flex-1 py-3 bg-white border border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition">Cerrar</button>
+               <button onClick={() => { if (infoProduct) { handleProductClick(infoProduct); setInfoProduct(null); } }} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200">Agregar a Venta</button>
             </div>
           </div>
         </div>
@@ -591,11 +515,10 @@ export default function POS() {
                 const daysLeft = Math.ceil((new Date(batch.fecha_vencimiento).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
                 const isUrgent = daysLeft < 30; 
                 return (
-                  <button key={index} onClick={() => addToCart(currentProduct, batch.fecha_vencimiento)} 
-                    className={`w-full p-4 rounded-2xl border flex justify-between items-center transition-all duration-200 hover:scale-[1.02] group text-left ${isUrgent ? 'bg-rose-50 border-rose-100 hover:border-rose-300' : 'bg-white border-gray-100 hover:border-indigo-300 hover:shadow-md'}`}>
+                  <button key={index} onClick={() => addToCart(currentProduct, batch.fecha_vencimiento)} className={`w-full p-4 rounded-2xl border flex justify-between items-center transition-all duration-200 hover:scale-[1.02] group text-left ${isUrgent ? 'bg-rose-50 border-rose-100 hover:border-rose-300' : 'bg-white border-gray-100 hover:border-indigo-300 hover:shadow-md'}`}>
                     <div>
-                       <div className="font-bold text-slate-700 text-lg group-hover:text-indigo-700 transition-colors">{new Date(batch.fecha_vencimiento).toLocaleDateString()}</div>
-                       <div className={`text-xs font-medium mt-1 ${isUrgent ? 'text-rose-600' : 'text-emerald-600'}`}>{isUrgent ? `⚠️ Vence en ${daysLeft} días` : '✅ Fecha óptima'}</div>
+                        <div className="font-bold text-slate-700 text-lg group-hover:text-indigo-700 transition-colors">{new Date(batch.fecha_vencimiento).toLocaleDateString()}</div>
+                        <div className={`text-xs font-medium mt-1 ${isUrgent ? 'text-rose-600' : 'text-emerald-600'}`}>{isUrgent ? `⚠️ Vence en ${daysLeft} días` : '✅ Fecha óptima'}</div>
                     </div>
                     <div className="text-right bg-white/50 px-3 py-1 rounded-lg">
                       <div className="text-[10px] text-slate-400 uppercase tracking-wide">Stock</div>
@@ -614,26 +537,26 @@ export default function POS() {
       {showCloseModal && registerDetails && (
         <div className="absolute inset-0 bg-slate-900/70 z-50 flex items-center justify-center backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-lg border border-gray-100">
-             <div className="flex justify-between items-center mb-8">
-               <div><h2 className="text-2xl font-extrabold text-slate-800">Corte de Caja</h2><p className="text-slate-400 text-sm">Resumen del turno actual</p></div>
-               <button onClick={() => setShowCloseModal(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition">✕</button>
-             </div>
-             <div className="bg-slate-50 p-5 rounded-2xl mb-8 space-y-3 text-sm border border-slate-200 shadow-inner">
-                <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Fondo Inicial</span><span className="font-mono font-bold text-slate-700">L. {Number(registerDetails.monto_apertura).toFixed(2)}</span></div>
-                <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Ventas Efectivo (+)</span><span className="font-mono font-bold text-emerald-600">L. {Number(registerDetails.ventasEfectivo).toFixed(2)}</span></div>
-                <div className="border-t border-slate-200 pt-3 flex justify-between items-center text-base"><span className="font-bold text-slate-800">Total Esperado</span><span className="font-mono font-black text-indigo-600 text-lg">L. {Number(registerDetails.totalEsperado).toFixed(2)}</span></div>
-             </div>
-             <label className="block text-sm font-bold text-slate-700 mb-3 ml-1">Dinero real en caja</label>
-             <div className="relative mb-4"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xl">L.</span><input type="number" className="w-full p-4 pl-10 border-2 border-gray-200 rounded-xl text-2xl font-bold text-center text-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" placeholder="0.00" value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} autoFocus /></div>
-             {cashAmount && (
-               <div className={`flex items-center justify-center gap-2 p-3 rounded-xl mb-8 text-sm font-bold border ${Number(cashAmount) - Number(registerDetails.totalEsperado) >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
-                 <span>{Number(cashAmount) - Number(registerDetails.totalEsperado) >= 0 ? '✅ SOBRA:' : '⚠️ FALTA:'}</span><span className="text-lg">L. {Math.abs(Number(cashAmount) - Number(registerDetails.totalEsperado)).toFixed(2)}</span>
-               </div>
-             )}
-             <div className="flex gap-4">
-               <button onClick={() => setShowCloseModal(false)} className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition">Cancelar</button>
-               <button onClick={() => handleRegisterAction('close')} className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg shadow-rose-200 transition transform active:scale-95">CERRAR TURNO</button>
-             </div>
+              <div className="flex justify-between items-center mb-8">
+                <div><h2 className="text-2xl font-extrabold text-slate-800">Corte de Caja</h2><p className="text-slate-400 text-sm">Resumen del turno actual</p></div>
+                <button onClick={() => setShowCloseModal(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition">✕</button>
+              </div>
+              <div className="bg-slate-50 p-5 rounded-2xl mb-8 space-y-3 text-sm border border-slate-200 shadow-inner">
+                 <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Fondo Inicial</span><span className="font-mono font-bold text-slate-700">L. {Number(registerDetails.monto_apertura).toFixed(2)}</span></div>
+                 <div className="flex justify-between items-center"><span className="text-slate-500 font-medium">Ventas Efectivo (+)</span><span className="font-mono font-bold text-emerald-600">L. {Number(registerDetails.ventasEfectivo).toFixed(2)}</span></div>
+                 <div className="border-t border-slate-200 pt-3 flex justify-between items-center text-base"><span className="font-bold text-slate-800">Total Esperado</span><span className="font-mono font-black text-indigo-600 text-lg">L. {Number(registerDetails.totalEsperado).toFixed(2)}</span></div>
+              </div>
+              <label className="block text-sm font-bold text-slate-700 mb-3 ml-1">Dinero real en caja</label>
+              <div className="relative mb-4"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xl">L.</span><input type="number" className="w-full p-4 pl-10 border-2 border-gray-200 rounded-xl text-2xl font-bold text-center text-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" placeholder="0.00" value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} autoFocus /></div>
+              {cashAmount && (
+                <div className={`flex items-center justify-center gap-2 p-3 rounded-xl mb-8 text-sm font-bold border ${Number(cashAmount) - Number(registerDetails.totalEsperado) >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                  <span>{Number(cashAmount) - Number(registerDetails.totalEsperado) >= 0 ? '✅ SOBRA:' : '⚠️ FALTA:'}</span><span className="text-lg">L. {Math.abs(Number(cashAmount) - Number(registerDetails.totalEsperado)).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex gap-4">
+                <button onClick={() => setShowCloseModal(false)} className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition">Cancelar</button>
+                <button onClick={() => handleRegisterAction('close')} className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg shadow-rose-200 transition transform active:scale-95">CERRAR TURNO</button>
+              </div>
           </div>
         </div>
       )}
@@ -683,70 +606,54 @@ export default function POS() {
           <div className="flex flex-col"><h1 className="text-2xl font-black text-slate-800 tracking-tight">Imza <span className="text-indigo-600">POS</span></h1><p className="text-sm text-slate-400 font-medium">Panel de Venta</p></div>
           <div className="flex gap-3">
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold">{user.name.charAt(0)}</div><div className="text-sm"><p className="font-bold text-slate-700">{user.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{user.tipo_usuario === 1 ? 'Administrador' : 'Vendedor'}</p></div></div>
+             
+             {/* --- BOTÓN DASHBOARD PARA ADMIN (NUEVO) --- */}
+             {userRole === 1 && (
+                 <button onClick={() => router.push('/admin')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95" title="Ir al Dashboard">
+                    <LayoutDashboard className="w-5 h-5" /> <span className="hidden xl:inline text-sm">Dashboard</span>
+                 </button>
+             )}
+
              <button onClick={() => { checkRegisterStatus().then(() => { setCashAmount(''); setShowCloseModal(true); }); }} className="bg-slate-800 hover:bg-slate-900 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-slate-200 transition-all active:scale-95" title="Corte de Caja"><span>🔒</span> <span className="hidden xl:inline text-sm">Cerrar Caja</span></button>
-             <button onClick={handleLogout} className="bg-white border-2 border-rose-100 text-rose-500 hover:bg-rose-50 hover:border-rose-200 px-4 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95" title="Salir"><span>🚪</span></button>
+             <button onClick={onLogoutClick} className="bg-white border-2 border-rose-100 text-rose-500 hover:bg-rose-50 hover:border-rose-200 px-4 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95" title="Salir"><span>🚪</span></button>
           </div>
         </div>
 
+        {/* ... Resto del panel izquierdo (buscador, filtros, lista) ... */}
+        {/* (Mantén el resto del código tal cual, no hay cambios abajo) */}
+        
+        {/* --- BARRA DE BUSQUEDA --- */}
         <div className="mb-4 relative group">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><svg className="w-6 h-6 text-gray-400 group-focus-within:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
           <input 
-             ref={searchInputRef}
-             type="text" 
-             placeholder="Buscar producto (Escáner, Código o Nombre)..." 
-             className="w-full p-5 pl-12 rounded-2xl bg-white border-2 border-transparent shadow-sm text-lg outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-gray-300" 
-             value={search} 
-             onChange={(e) => setSearch(e.target.value)} 
-             onKeyDown={handleScan}
-             autoComplete="off"
-             autoFocus 
+              ref={searchInputRef}
+              type="text" 
+              placeholder="Buscar producto (Escáner, Código o Nombre)..." 
+              className="w-full p-5 pl-12 rounded-2xl bg-white border-2 border-transparent shadow-sm text-lg outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-gray-300" 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              onKeyDown={handleScan}
+              autoComplete="off"
+              autoFocus 
           />
         </div>
 
-        {/* --- BARRA DE FILTROS (NUEVO) --- */}
+        {/* --- BARRA DE FILTROS --- */}
         <div className="mb-4 space-y-3">
-            {/* Categorías */}
             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                <button 
-                    onClick={() => handleCategoryClick(0)}
-                    className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${selectedCat === 0 ? 'bg-slate-800 text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
-                >
-                    Todo
-                </button>
-                {categories.map(cat => (
-                    <button 
-                        key={cat.idcategoria}
-                        onClick={() => handleCategoryClick(cat.idcategoria)}
-                        className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${selectedCat === cat.idcategoria ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'}`}
-                    >
-                        {cat.nombre_categoria}
-                    </button>
-                ))}
+                <button onClick={() => handleCategoryClick(0)} className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${selectedCat === 0 ? 'bg-slate-800 text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>Todo</button>
+                {categories.map(cat => (<button key={cat.idcategoria} onClick={() => handleCategoryClick(cat.idcategoria)} className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${selectedCat === cat.idcategoria ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'}`}>{cat.nombre_categoria}</button>))}
             </div>
-
-            {/* Subcategorías (Se muestra si hay categoría seleccionada y tiene hijos) */}
             {selectedCat > 0 && subcategories.filter(s => s.idcategoria === selectedCat).length > 0 && (
                 <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar animate-in slide-in-from-top-2 fade-in duration-300">
                     <div className="flex items-center text-slate-400 px-2"><ChevronRight className="w-4 h-4" /></div>
-                    <button 
-                        onClick={() => setSelectedSubCat(0)}
-                        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedSubCat === 0 ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
-                    >
-                        Todas
-                    </button>
-                    {subcategories.filter(s => s.idcategoria === selectedCat).map(sub => (
-                        <button 
-                            key={sub.idsubcategoria}
-                            onClick={() => handleSubCategoryClick(sub.idsubcategoria)}
-                            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedSubCat === sub.idsubcategoria ? 'bg-indigo-500 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'}`}
-                        >
-                            {sub.nombre_subcategoria}
-                        </button>
-                    ))}
+                    <button onClick={() => setSelectedSubCat(0)} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedSubCat === 0 ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>Todas</button>
+                    {subcategories.filter(s => s.idcategoria === selectedCat).map(sub => (<button key={sub.idsubcategoria} onClick={() => handleSubCategoryClick(sub.idsubcategoria)} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedSubCat === sub.idsubcategoria ? 'bg-indigo-500 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600'}`}>{sub.nombre_subcategoria}</button>))}
                 </div>
             )}
         </div>
 
+        {/* --- LISTA PRODUCTOS --- */}
         <div className="flex-1 overflow-y-auto pr-2 pb-4">
           {loading && <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-400"><div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div><p>Buscando productos...</p></div>}
           {!loading && products.length === 0 && <div className="flex flex-col items-center justify-center h-64 text-slate-400 opacity-60"><span className="text-6xl mb-4">📦</span><p className="text-lg">No se encontraron productos</p></div>}
@@ -754,20 +661,10 @@ export default function POS() {
             {products.map((prod) => {
               const isOutOfStock = Number(prod.stock) <= 0;
               const hasInfo = prod.descripcion && prod.descripcion.trim().length > 0;
-
               return (
                 <button key={prod.idproducto} onClick={() => handleProductClick(prod)} disabled={isOutOfStock} className={`group relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-44 text-left transition-all duration-300 ${isOutOfStock ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:-translate-y-1 hover:shadow-xl hover:border-indigo-200'}`}>
                   {hasInfo && (
-                    <div 
-                        onClick={(e) => {
-                            e.stopPropagation(); 
-                            setInfoProduct(prod);
-                        }}
-                        className="absolute top-2 right-2 z-20 p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                        title="Ver Compatibilidad"
-                    >
-                        <Info className="w-4 h-4" />
-                    </div>
+                    <div onClick={(e) => { e.stopPropagation(); setInfoProduct(prod); }} className="absolute top-2 right-2 z-20 p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Ver Compatibilidad"><Info className="w-4 h-4" /></div>
                   )}
                   <div className="mb-2">
                     <div className="flex justify-between items-start mb-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-xl shadow-inner text-indigo-500 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">⚙️</div><span className={`text-[10px] font-bold px-2 py-1 rounded-full ${Number(prod.stock) > 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>Stok: {Number(prod.stock).toFixed(0)}</span></div>
@@ -807,7 +704,6 @@ export default function POS() {
 
           {cart.map((item, idx) => (
             <div key={`${item.idproducto}-${item.fecha_vencimiento || idx}`} className="group bg-white p-3 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all animate-in slide-in-from-right-4 duration-300">
-              
               <div className="flex justify-between items-start mb-2">
                  <div className="flex-1 min-w-0 pr-2">
                     <div className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight">{item.nombre_producto}</div>
@@ -825,32 +721,17 @@ export default function POS() {
 
                  <div className="flex flex-col items-end px-2">
                     <div className="flex gap-1 mb-1">
-                        <button 
-                            onClick={() => updatePrice(item.idproducto, item.fecha_vencimiento || null, item.precio_venta)}
-                            className={`w-6 h-6 text-[10px] font-bold rounded-full border ${item.precio_numerico === Number(item.precio_venta) ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'}`}
-                            title={`Público: L. ${Number(item.precio_venta).toFixed(2)}`}
-                        >1</button>
-                        <button 
-                            onClick={() => updatePrice(item.idproducto, item.fecha_vencimiento || null, item.precio_venta_mayoreo)}
-                            className={`w-6 h-6 text-[10px] font-bold rounded-full border ${item.precio_numerico === Number(item.precio_venta_mayoreo) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-300 border-blue-100 hover:border-blue-300'}`}
-                            title={`Mayoreo: L. ${Number(item.precio_venta_mayoreo).toFixed(2)}`}
-                        >2</button>
-                        <button 
-                            onClick={() => updatePrice(item.idproducto, item.fecha_vencimiento || null, item.precio_venta_3)}
-                            className={`w-6 h-6 text-[10px] font-bold rounded-full border ${item.precio_numerico === Number(item.precio_venta_3) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-300 border-purple-100 hover:border-purple-300'}`}
-                            title={`Especial: L. ${Number(item.precio_venta_3).toFixed(2)}`}
-                        >3</button>
+                        <button onClick={() => updatePrice(item.idproducto, item.fecha_vencimiento || null, item.precio_venta)} className={`w-6 h-6 text-[10px] font-bold rounded-full border ${item.precio_numerico === Number(item.precio_venta) ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'}`} title={`Público: L. ${Number(item.precio_venta).toFixed(2)}`}>1</button>
+                        <button onClick={() => updatePrice(item.idproducto, item.fecha_vencimiento || null, item.precio_venta_mayoreo)} className={`w-6 h-6 text-[10px] font-bold rounded-full border ${item.precio_numerico === Number(item.precio_venta_mayoreo) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-300 border-blue-100 hover:border-blue-300'}`} title={`Mayoreo: L. ${Number(item.precio_venta_mayoreo).toFixed(2)}`}>2</button>
+                        <button onClick={() => updatePrice(item.idproducto, item.fecha_vencimiento || null, item.precio_venta_3)} className={`w-6 h-6 text-[10px] font-bold rounded-full border ${item.precio_numerico === Number(item.precio_venta_3) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-300 border-purple-100 hover:border-purple-300'}`} title={`Especial: L. ${Number(item.precio_venta_3).toFixed(2)}`}>3</button>
                     </div>
-
                     <div className="flex items-center gap-1">
                       {canEditPrice ? (
                         <div className="relative group/price">
                            <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 font-bold">L.</span>
                            <input type="number" className="w-16 pl-3 py-0 text-right text-xs font-bold bg-transparent border-b border-dashed border-gray-300 focus:border-indigo-500 focus:bg-white outline-none transition-all text-indigo-600" value={item.precio_numerico} onChange={(e) => updatePrice(item.idproducto, item.fecha_vencimiento || null, e.target.value)} />
                         </div>
-                      ) : (
-                        <span className="text-xs font-medium text-gray-500">L. {item.precio_numerico.toFixed(2)}</span>
-                      )}
+                      ) : (<span className="text-xs font-medium text-gray-500">L. {item.precio_numerico.toFixed(2)}</span>)}
                     </div>
                     <div className="font-black text-slate-800">L. {(item.cantidad * item.precio_numerico).toFixed(2)}</div>
                  </div>
@@ -861,9 +742,9 @@ export default function POS() {
 
         <div className="p-6 bg-white z-30 border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
           <div className="space-y-1 mb-6">
-             <div className="flex justify-between text-slate-400 text-sm"><span>Subtotal</span><span>L. {(total / 1.15).toFixed(2)}</span></div>
-             <div className="flex justify-between text-slate-400 text-sm"><span>ISV (15%)</span><span>L. {(total - (total / 1.15)).toFixed(2)}</span></div>
-             <div className="flex justify-between items-end pt-2 mt-2 border-t border-dashed border-gray-200"><span className="text-slate-800 font-bold text-lg">Total a Pagar</span><span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600">L. {total.toFixed(2)}</span></div>
+              <div className="flex justify-between text-slate-400 text-sm"><span>Subtotal</span><span>L. {(total / 1.15).toFixed(2)}</span></div>
+              <div className="flex justify-between text-slate-400 text-sm"><span>ISV (15%)</span><span>L. {(total - (total / 1.15)).toFixed(2)}</span></div>
+              <div className="flex justify-between items-end pt-2 mt-2 border-t border-dashed border-gray-200"><span className="text-slate-800 font-bold text-lg">Total a Pagar</span><span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600">L. {total.toFixed(2)}</span></div>
           </div>
           <button onClick={() => setShowPaymentModal(true)} disabled={cart.length === 0} className="w-full py-4 rounded-2xl font-bold text-lg text-white shadow-xl shadow-indigo-200 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">COBRAR</button>
         </div>
