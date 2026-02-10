@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Info, X, ChevronRight, LayoutDashboard } from 'lucide-react'; // Agregamos icono Dashboard
+import { Info, X, ChevronRight, LayoutDashboard, Image as ImageIcon } from 'lucide-react'; 
 import { useAuth } from '@/context/AuthContext';
 
 // --- Interfaces ---
@@ -16,6 +16,7 @@ interface Producto {
   stock: string | number;
   idcategoria: number;
   idsubcategoria?: number;
+  imagen?: string; // <--- NUEVO CAMPO
 }
 
 interface CartItem extends Producto {
@@ -115,9 +116,6 @@ export default function POS() {
   // =========================================
 
   useEffect(() => {
-    // 1. Verificación rápida local (Opcional, solo para UX)
-    const savedUser = localStorage.getItem('pos_user');
-    
     fetch('/api/auth/session')
       .then(res => {
         if (!res.ok) throw new Error('No autorizado');
@@ -125,13 +123,8 @@ export default function POS() {
       })
       .then(data => {
         const userData = data.user;
-        
-        // --- CORRECCIÓN: ELIMINADA LA REDIRECCIÓN FORZADA DEL ADMIN ---
-        // Ahora el Admin puede entrar aquí sin problemas.
-        
         setUser(userData);
         
-        // Sincronizamos con Contexto Global para que el AdminLayout funcione si navegas allá
         const sessionData = {
             idusuario: userData.id,
             nombre: userData.name,
@@ -145,7 +138,6 @@ export default function POS() {
         fetchCustomers();
         fetchCatalogs();
         
-        // Carga de comprobantes
         fetch('/api/settings/comprobantes')
           .then(res => res.json())
           .then(data => {
@@ -170,7 +162,6 @@ export default function POS() {
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Efecto búsqueda
   useEffect(() => {
     if (isRegisterOpen) {
       const timer = setTimeout(() => {
@@ -185,7 +176,6 @@ export default function POS() {
     }
   }, [search, isRegisterOpen]);
 
-  // Efecto Filtros Locales
   useEffect(() => {
       if (allProducts.length > 0) {
           let filtered = [...allProducts];
@@ -195,7 +185,6 @@ export default function POS() {
       }
   }, [selectedCat, selectedSubCat, allProducts]);
 
-  // Focus automático
   useEffect(() => {
     if (!showBatchModal && !showPaymentModal && !showCloseModal && !loading && !infoProduct) {
        setTimeout(() => searchInputRef.current?.focus(), 100);
@@ -449,7 +438,6 @@ export default function POS() {
 
   if (isRegisterOpen === null) return <div className="h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium">Verificando caja...</div>;
 
-  // --- APERTURA ---
   if (isRegisterOpen === false) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4 font-sans">
@@ -467,7 +455,6 @@ export default function POS() {
     );
   }
 
-  // --- POS PRINCIPAL ---
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans relative text-gray-800">
       <style jsx global>{`
@@ -479,14 +466,19 @@ export default function POS() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
       `}</style>
 
-      {/* ... (Modales de info y lote igual que antes) ... */}
-      {/* (Para ahorrar espacio aquí, asumo que mantienes los modales de Info, Lote, Corte y Pago igual) */}
+      {/* --- MODAL INFO --- */}
       {infoProduct && (
         <div className="absolute inset-0 bg-slate-900/60 z-[70] flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-md p-6 rounded-3xl shadow-2xl relative border border-gray-100">
             <button onClick={() => setInfoProduct(null)} className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-red-100 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
             <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100"><Info className="w-8 h-8" /></div>
+              {infoProduct.imagen ? (
+                  <div className="w-32 h-32 mx-auto mb-4 rounded-xl overflow-hidden border border-slate-100 shadow-sm">
+                      <img src={infoProduct.imagen} className="w-full h-full object-cover"/>
+                  </div>
+              ) : (
+                  <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100"><Info className="w-8 h-8" /></div>
+              )}
               <h3 className="text-xl font-black text-slate-800 leading-tight px-4">{infoProduct.nombre_producto}</h3>
               <p className="text-slate-400 text-xs font-mono mt-2 bg-slate-100 inline-block px-3 py-1 rounded-full">ID: {infoProduct.idproducto}</p>
             </div>
@@ -561,7 +553,7 @@ export default function POS() {
         </div>
       )}
 
-      {/* --- MODAL PAGO (DISEÑO OPTIMIZADO) --- */}
+      {/* --- MODAL PAGO --- */}
       {showPaymentModal && (
         <div className="absolute inset-0 bg-slate-900/80 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
           <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col lg:flex-row max-h-[90vh] border border-gray-200">
@@ -607,7 +599,6 @@ export default function POS() {
           <div className="flex gap-3">
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold">{user.name.charAt(0)}</div><div className="text-sm"><p className="font-bold text-slate-700">{user.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{user.tipo_usuario === 1 ? 'Administrador' : 'Vendedor'}</p></div></div>
              
-             {/* --- BOTÓN DASHBOARD PARA ADMIN (NUEVO) --- */}
              {userRole === 1 && (
                  <button onClick={() => router.push('/admin')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95" title="Ir al Dashboard">
                     <LayoutDashboard className="w-5 h-5" /> <span className="hidden xl:inline text-sm">Dashboard</span>
@@ -619,26 +610,12 @@ export default function POS() {
           </div>
         </div>
 
-        {/* ... Resto del panel izquierdo (buscador, filtros, lista) ... */}
-        {/* (Mantén el resto del código tal cual, no hay cambios abajo) */}
-        
-        {/* --- BARRA DE BUSQUEDA --- */}
         <div className="mb-4 relative group">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><svg className="w-6 h-6 text-gray-400 group-focus-within:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
-          <input 
-              ref={searchInputRef}
-              type="text" 
-              placeholder="Buscar producto (Escáner, Código o Nombre)..." 
-              className="w-full p-5 pl-12 rounded-2xl bg-white border-2 border-transparent shadow-sm text-lg outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-gray-300" 
-              value={search} 
-              onChange={(e) => setSearch(e.target.value)} 
-              onKeyDown={handleScan}
-              autoComplete="off"
-              autoFocus 
-          />
+          <input ref={searchInputRef} type="text" placeholder="Buscar producto (Escáner, Código o Nombre)..." className="w-full p-5 pl-12 rounded-2xl bg-white border-2 border-transparent shadow-sm text-lg outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-gray-300" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={handleScan} autoComplete="off" autoFocus />
         </div>
 
-        {/* --- BARRA DE FILTROS --- */}
+        {/* --- FILTROS --- */}
         <div className="mb-4 space-y-3">
             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                 <button onClick={() => handleCategoryClick(0)} className={`shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${selectedCat === 0 ? 'bg-slate-800 text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>Todo</button>
@@ -653,25 +630,49 @@ export default function POS() {
             )}
         </div>
 
-        {/* --- LISTA PRODUCTOS --- */}
+        {/* --- GRID PRODUCTOS (CON IMAGEN) --- */}
         <div className="flex-1 overflow-y-auto pr-2 pb-4">
           {loading && <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-400"><div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div><p>Buscando productos...</p></div>}
           {!loading && products.length === 0 && <div className="flex flex-col items-center justify-center h-64 text-slate-400 opacity-60"><span className="text-6xl mb-4">📦</span><p className="text-lg">No se encontraron productos</p></div>}
+          
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
             {products.map((prod) => {
               const isOutOfStock = Number(prod.stock) <= 0;
               const hasInfo = prod.descripcion && prod.descripcion.trim().length > 0;
               return (
-                <button key={prod.idproducto} onClick={() => handleProductClick(prod)} disabled={isOutOfStock} className={`group relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-44 text-left transition-all duration-300 ${isOutOfStock ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:-translate-y-1 hover:shadow-xl hover:border-indigo-200'}`}>
+                <button key={prod.idproducto} onClick={() => handleProductClick(prod)} disabled={isOutOfStock} className={`group relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between h-56 text-left transition-all duration-300 ${isOutOfStock ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:-translate-y-1 hover:shadow-xl hover:border-indigo-200'}`}>
+                  
+                  {/* ICONO INFO (SI EXISTE) */}
                   {hasInfo && (
-                    <div onClick={(e) => { e.stopPropagation(); setInfoProduct(prod); }} className="absolute top-2 right-2 z-20 p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Ver Compatibilidad"><Info className="w-4 h-4" /></div>
+                    <div onClick={(e) => { e.stopPropagation(); setInfoProduct(prod); }} className="absolute top-2 left-2 z-20 p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Ver Info"><Info className="w-4 h-4" /></div>
                   )}
+
+                  {/* IMAGEN DEL PRODUCTO (NUEVO DISEÑO) */}
+                  <div className="h-28 w-full mb-3 rounded-xl overflow-hidden bg-white border border-slate-100 relative group-hover:border-indigo-100 transition flex items-center justify-center">
+                      {prod.imagen ? (
+                          <img src={prod.imagen} alt={prod.nombre_producto} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" />
+                      ) : (
+                          <span className="text-4xl opacity-20 grayscale">📦</span>
+                      )}
+                      
+                      {/* BADGE STOCK FLOTANTE */}
+                      <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-full shadow-sm ${Number(prod.stock) > 10 ? 'bg-emerald-100/90 text-emerald-700' : 'bg-amber-100/90 text-amber-700'}`}>
+                          {Number(prod.stock).toFixed(0)}
+                      </span>
+                  </div>
+
                   <div className="mb-2">
-                    <div className="flex justify-between items-start mb-2"><div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-xl shadow-inner text-indigo-500 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">⚙️</div><span className={`text-[10px] font-bold px-2 py-1 rounded-full ${Number(prod.stock) > 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>Stok: {Number(prod.stock).toFixed(0)}</span></div>
                     <h3 className="font-bold text-slate-700 text-sm leading-tight line-clamp-2 group-hover:text-indigo-700 transition-colors">{prod.nombre_producto}</h3>
                     <p className="text-[10px] text-slate-400 mt-1 font-mono">{prod.codigo_barra}</p>
                   </div>
-                  <div className="pt-3 border-t border-dashed border-gray-100"><span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider">Precio</span><span className="text-xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">L. {Number(prod.precio_venta).toFixed(2)}</span></div>
+                  
+                  <div className="pt-2 border-t border-dashed border-gray-100 flex justify-between items-end">
+                      <div>
+                          <span className="block text-[9px] text-slate-400 uppercase font-bold tracking-wider">Precio</span>
+                          <span className="text-lg font-black text-slate-800 group-hover:text-indigo-600 transition-colors">L. {Number(prod.precio_venta).toFixed(2)}</span>
+                      </div>
+                  </div>
+
                   {isOutOfStock && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center rounded-2xl"><span className="bg-rose-500 text-white text-xs px-3 py-1 rounded-full font-bold shadow-lg transform -rotate-6 border-2 border-white">AGOTADO</span></div>}
                 </button>
               );

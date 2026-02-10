@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const connection = await pool.getConnection();
 
     // Base query updated to JOIN with category, subcategory, brand, and presentation
+    // Nota: p.* ya trae la columna 'imagen' si existe en la tabla
     let query = `
       SELECT p.*, 
              c.nombre_categoria, 
@@ -68,7 +69,7 @@ export async function GET(request: Request) {
   }
 }
 
-// 2. POST: Create New Product (Updated with subcategory)
+// 2. POST: Create New Product (Updated with subcategory AND imagen)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -83,10 +84,11 @@ export async function POST(request: Request) {
       stock, 
       stock_min,
       idcategoria,
-      idsubcategoria, // <--- New Field
+      idsubcategoria, // <--- Field existente
       idmarca,        
       idpresentacion, 
-      perecedero      
+      perecedero,
+      imagen          // <--- NUEVO CAMPO RECIBIDO
     } = body;
 
     const connection = await pool.getConnection();
@@ -100,7 +102,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Direct INSERT with idsubcategoria
+    // Direct INSERT with idsubcategoria AND imagen
     const [res] = await connection.query<ResultSetHeader>(
       `INSERT INTO producto (
         codigo_barra, 
@@ -113,13 +115,14 @@ export async function POST(request: Request) {
         stock, 
         stock_min, 
         idcategoria, 
-        idsubcategoria,    -- <--- New Column
+        idsubcategoria,    -- <--- Column existente
         idmarca,           
         idpresentacion,    
         estado, 
         perecedero,        
-        inventariable
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1)`,
+        inventariable,
+        imagen             -- <--- NUEVA COLUMNA
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)`,
       [
         codigo_barra || null,
         nombre_producto,
@@ -134,7 +137,8 @@ export async function POST(request: Request) {
         idsubcategoria || 0,          // <--- Default 0 if undefined
         idmarca || null,              
         idpresentacion || 1,
-        perecedero || 0
+        perecedero || 0,
+        imagen || null                // <--- GUARDAR URL IMAGEN
       ]
     );
 
@@ -147,7 +151,7 @@ export async function POST(request: Request) {
   }
 }
 
-// 3. PUT: Update Product (Updated with subcategory)
+// 3. PUT: Update Product (Updated with subcategory AND imagen)
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
@@ -160,13 +164,14 @@ export async function PUT(request: Request) {
       precio_venta, 
       precio_venta_mayoreo,
       precio_venta_3,
-      stock,          
+      stock,              
       stock_min,
       idcategoria,
-      idsubcategoria, // <--- New Field
+      idsubcategoria, // <--- Field existente
       idmarca,        
       idpresentacion, 
-      perecedero
+      perecedero,
+      imagen          // <--- NUEVO CAMPO RECIBIDO
     } = body;
 
     if (!idproducto) {
@@ -187,10 +192,11 @@ export async function PUT(request: Request) {
         stock=?,              
         stock_min=?,
         idcategoria=?,
-        idsubcategoria=?,     -- <--- New Column
+        idsubcategoria=?,     -- <--- Column existente
         idmarca=?,            
         idpresentacion=?,     
-        perecedero=?          
+        perecedero=?,
+        imagen=?              -- <--- NUEVA ACTUALIZACIÓN
        WHERE idproducto=?`,
       [
         codigo_barra, 
@@ -207,6 +213,7 @@ export async function PUT(request: Request) {
         idmarca || null,
         idpresentacion,
         perecedero || 0,
+        imagen || null,       // <--- GUARDAR URL IMAGEN
         idproducto
       ]
     );
