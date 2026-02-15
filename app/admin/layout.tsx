@@ -48,6 +48,50 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-screen bg-[#f8fafc] overflow-hidden">
       
+      {/* --- ESTILOS DE SCROLLBAR DISCRETOS --- */}
+      <style jsx global>{`
+        /* Scrollbar ultra-fina y oscura para el Sidebar */
+        .sidebar-scroll::-webkit-scrollbar {
+          width: 4px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+          background: rgba(51, 65, 85, 0.5); /* slate-700 con opacidad */
+          border-radius: 10px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(71, 85, 105, 0.8); /* slate-600 al pasar el mouse */
+        }
+
+        /* Scrollbar fina y clara para el contenido principal */
+        .content-scroll::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        .content-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .content-scroll::-webkit-scrollbar-thumb {
+          background: rgba(203, 213, 225, 0.6); /* slate-300 con opacidad */
+          border-radius: 10px;
+        }
+        .content-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(148, 163, 184, 0.8); /* slate-400 al pasar el mouse */
+        }
+
+        /* Soporte para Firefox (Estándar web) */
+        .sidebar-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(51, 65, 85, 0.5) transparent;
+        }
+        .content-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(203, 213, 225, 0.6) transparent;
+        }
+      `}</style>
+
       {/* SIDEBAR */}
       <aside className={`${isSidebarOpen ? 'w-72' : 'w-20'} bg-[#0f172a] text-slate-300 flex flex-col shadow-2xl z-30 transition-all duration-300 ease-in-out`}>
         
@@ -79,8 +123,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         )}
 
-        {/* NAVEGACIÓN */}
-        <nav className="flex-1 px-4 mt-4 space-y-1 overflow-y-auto custom-scrollbar">
+        {/* NAVEGACIÓN (AQUÍ APLICAMOS LA CLASE sidebar-scroll) */}
+        <nav className="flex-1 px-4 mt-4 space-y-1 overflow-y-auto sidebar-scroll">
           <p className={`text-[10px] font-black text-slate-500 px-2 mb-2 uppercase tracking-[0.2em] ${!isSidebarOpen && 'hidden'}`}>
             Menú Principal
           </p>
@@ -150,8 +194,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        {/* ÁREA DE CONTENIDO DINÁMICO */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+        {/* ÁREA DE CONTENIDO DINÁMICO (AQUÍ APLICAMOS LA CLASE content-scroll) */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 content-scroll">
             <div className="max-w-7xl mx-auto">
                {children}
             </div>
