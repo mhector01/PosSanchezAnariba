@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, Layers, AlertTriangle, Printer, ListTree, Search } from 'lucide-react';
 
 // --- INTERFACES PARA TYPESCRIPT ---
@@ -26,12 +26,13 @@ export default function ReportsPage() {
 
   useEffect(() => {
     setLoading(true);
+    // Si estamos en detalle por categoría, llamamos a inventory para traer todos los productos
     const apiType = activeTab === 'items_by_category' ? 'inventory' : activeTab;
     
     fetch(`/api/reports?type=${apiType}`)
       .then(res => res.json())
       .then(data => {
-        setData(data);
+        setData(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
@@ -40,38 +41,48 @@ export default function ReportsPage() {
       });
   }, [activeTab]);
 
+  // --- OBTENER CATEGORÍAS ÚNICAS PARA EL SELECT ---
+  // Hacemos esto ANTES de filtrar displayData, para que el select siempre tenga todas las opciones.
+  const uniqueCategories = useMemo(() => {
+      const cats = new Set(data.map(item => item.nombre_categoria || 'Sin Categoría'));
+      return Array.from(cats).sort();
+  }, [data]);
+
   // --- LÓGICA DE FILTRADO ---
   let displayData = data;
   if (activeTab === 'items_by_category' && selectedCategory !== 'Todas') {
-    displayData = data.filter(item => item.nombre_categoria === selectedCategory);
+    displayData = data.filter(item => (item.nombre_categoria || 'Sin Categoría') === selectedCategory);
   }
 
   const totalCosto = displayData.reduce((sum, item) => sum + (Number(item.total_costo) || Number(item.valor_inversion) || 0), 0);
   const totalItems = displayData.length;
 
-  // --- LÓGICA DE AGRUPACIÓN (Con Tipado Estricto) ---
-  const groupedData: Record<string, CategoryData> = displayData.reduce((acc, item) => {
-    const cat = item.nombre_categoria || 'Sin Categoría';
-    const sub = item.nombre_subcategoria || 'General';
+  // --- LÓGICA DE AGRUPACIÓN ---
+  // Solo agrupamos si estamos en la tab correcta, y usamos displayData (que ya está filtrada si el usuario usó el select)
+  const groupedData = useMemo(() => {
+      if (activeTab !== 'items_by_category') return {};
 
-    if (!acc[cat]) {
-        acc[cat] = { totalCosto: 0, itemsCount: 0, subs: {} };
-    }
-    if (!acc[cat].subs[sub]) {
-        acc[cat].subs[sub] = { totalCosto: 0, items: [] };
-    }
+      return displayData.reduce((acc, item) => {
+        const cat = item.nombre_categoria || 'Sin Categoría';
+        const sub = item.nombre_subcategoria || 'General';
 
-    acc[cat].subs[sub].items.push(item);
-    const itemTotal = Number(item.total_costo) || 0;
-    
-    acc[cat].subs[sub].totalCosto += itemTotal;
-    acc[cat].totalCosto += itemTotal;
-    acc[cat].itemsCount += 1;
+        if (!acc[cat]) {
+            acc[cat] = { totalCosto: 0, itemsCount: 0, subs: {} };
+        }
+        if (!acc[cat].subs[sub]) {
+            acc[cat].subs[sub] = { totalCosto: 0, items: [] };
+        }
 
-    return acc;
-  }, {} as Record<string, CategoryData>); 
+        acc[cat].subs[sub].items.push(item);
+        const itemTotal = Number(item.total_costo) || 0;
+        
+        acc[cat].subs[sub].totalCosto += itemTotal;
+        acc[cat].totalCosto += itemTotal;
+        acc[cat].itemsCount += 1;
 
-  const uniqueCategories = Array.from(new Set(data.map(item => item.nombre_categoria || 'Sin Categoría'))).sort();
+        return acc;
+      }, {} as Record<string, CategoryData>);
+  }, [displayData, activeTab]);
 
   const handlePrint = () => {
     window.print();
@@ -157,7 +168,7 @@ export default function ReportsPage() {
                     <p className="text-2xl font-black text-emerald-700 print:text-black">L. {totalCosto.toLocaleString('es-HN', {minimumFractionDigits: 2})}</p>
                 </div>
                 
-                {/* FILTRO DROPDOWN */}
+                {/* FILTRO DROPDOWN (Solo en Items by Category) */}
                 {activeTab === 'items_by_category' && (
                     <div className="col-span-2 p-4 bg-indigo-50 rounded-xl border border-indigo-100 print:hidden flex flex-col justify-center">
                         <label className="text-xs text-indigo-600 uppercase font-bold mb-1 flex items-center gap-1"><Search className="w-3 h-3"/> Filtrar Categoría</label>
@@ -248,7 +259,7 @@ export default function ReportsPage() {
                             </tr>
                         ))}
 
-                        {/* DETALLE POR CATEGORÍA AGRUPADO (TS SOLUCIONADO) */}
+                        {/* DETALLE POR CATEGORÍA AGRUPADO */}
                         {activeTab === 'items_by_category' && Object.entries(groupedData).map((entry) => {
                             const catName = entry[0];
                             const catData = entry[1] as CategoryData;
@@ -295,7 +306,7 @@ export default function ReportsPage() {
                             );
                         })}
 
-                        {displayData.length === 0 && (
+                        {displayData.length === 0 && !loading && (
                             <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-medium">No hay datos para mostrar en esta vista.</td></tr>
                         )}
                     </tbody>
