@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, RefreshCw, Save, X, Pencil, Search, Scale, FileClock, UploadCloud, Image as ImageIcon, Calendar } from 'lucide-react'; 
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Añadido React para Fragment
+import { Plus, RefreshCw, Save, X, Pencil, Search, Scale, FileClock, UploadCloud, Image as ImageIcon, ChevronDown, ChevronUp } from 'lucide-react'; 
 import { useAuth } from '@/context/AuthContext';
 
 // --- INTERFACES ---
@@ -22,7 +22,7 @@ interface Product {
   idpresentacion: number;
   perecedero: number;
   nombre_marca?: string;
-  imagen?: string; // Campo para la URL de la imagen
+  imagen?: string;
 }
 
 interface Category { idcategoria: number; nombre_categoria: string; }
@@ -30,7 +30,10 @@ interface Subcategory { idsubcategoria: number; nombre_subcategoria: string; idc
 interface Brand { idmarca: number; nombre_marca: string; }
 interface Presentation { idpresentacion: number; nombre_presentacion: string; }
 
-// --- COMPONENTE AUXILIAR (QUICK CREATE) ---
+// --- COMPONENTES AUXILIARES (QUICK CREATE, ADJUST, HISTORY se mantienen igual) ---
+// (He omitido el código repetido de los modales para ir directo a la solución, 
+// pero mantenlos en tu archivo original arriba de la función principal)
+
 const QuickCreateModal = ({ isOpen, title, label, value, onChange, onSave, onClose, loading }: any) => {
     if (!isOpen) return null;
     return (
@@ -54,25 +57,20 @@ const QuickCreateModal = ({ isOpen, title, label, value, onChange, onSave, onClo
     );
 };
 
-// --- COMPONENTE AUXILIAR (AJUSTE INVENTARIO) ---
 const AdjustStockModal = ({ isOpen, product, onClose, onSave }: any) => {
     const [realStock, setRealStock] = useState('');
     const [reason, setReason] = useState('');
     const [loading, setLoading] = useState(false);
-
     if (!isOpen || !product) return null;
-
     const currentStock = Number(product.stock);
     const newStock = Number(realStock);
     const diff = newStock - currentStock;
-
     const handleSave = async () => {
         if (!realStock || !reason) return alert("Completa los campos");
         setLoading(true);
         await onSave(product.idproducto, currentStock, newStock, reason);
         setLoading(false);
     };
-
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
             <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 p-8 w-full max-w-md relative">
@@ -111,24 +109,16 @@ const AdjustStockModal = ({ isOpen, product, onClose, onSave }: any) => {
     );
 };
 
-// --- COMPONENTE AUXILIAR (HISTORIAL) ---
 const HistoryModal = ({ isOpen, onClose }: any) => {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-
     useEffect(() => {
         if(isOpen) {
             setLoading(true);
-            fetch('/api/inventory/adjust/history')
-                .then(res => res.json())
-                .then(data => setHistory(Array.isArray(data) ? data : []))
-                .catch(err => console.error(err))
-                .finally(() => setLoading(false));
+            fetch('/api/inventory/adjust/history').then(res => res.json()).then(data => setHistory(Array.isArray(data) ? data : [])).catch(err => console.error(err)).finally(() => setLoading(false));
         }
     }, [isOpen]);
-
     if (!isOpen) return null;
-
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col border border-slate-200">
@@ -184,17 +174,17 @@ export default function AdminProductsPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // --- ESTADO PARA EXPANDIR FILAS (NUEVO) ---
+  const [expandedRows, setExpandedRows] = useState<number[]>([]);
 
-  // Catálogos
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]); 
   const [filteredSubcats, setFilteredSubcats] = useState<Subcategory[]>([]); 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [presentations, setPresentations] = useState<Presentation[]>([]);
-
   const [quickModal, setQuickModal] = useState({ type: '', isOpen: false, value: '', loading: false });
 
-  // Upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -240,6 +230,13 @@ export default function AdminProductsPage() {
     return () => clearTimeout(timer);
   }, [search, fetchProducts]);
 
+  // --- LÓGICA TOGGLE FILA (NUEVA) ---
+  const toggleRow = (id: number) => {
+    setExpandedRows(prev => 
+      prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
+    );
+  };
+
   const handleOpenQuick = (type: 'cat' | 'subcat' | 'brand' | 'pres') => {
     if (type === 'subcat' && !form.idcategoria) return alert("Selecciona primero una categoría");
     setQuickModal({ type, isOpen: true, value: '', loading: false });
@@ -254,7 +251,6 @@ export default function AdminProductsPage() {
       if (quickModal.type === 'brand') { url = '/api/brands'; body = { nombre_marca: quickModal.value }; }
       if (quickModal.type === 'pres') { url = '/api/presentations'; body = { nombre_presentacion: quickModal.value }; }
       if (quickModal.type === 'subcat') { url = '/api/subcategories'; body = { nombre_subcategoria: quickModal.value, idcategoria: form.idcategoria }; }
-      
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json(); 
       if (res.ok) {
@@ -273,7 +269,6 @@ export default function AdminProductsPage() {
   const handleOpenCreate = () => { setForm({ ...initialForm, idcategoria: categories[0]?.idcategoria || 0 }); setIsEditing(false); setShowModal(true); };
   const handleOpenEdit = (prod: Product) => { setForm(prod); setIsEditing(true); setShowModal(true); };
 
-  // --- SUBIDA DE IMAGEN (CLOUDINARY) ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -281,11 +276,10 @@ export default function AdminProductsPage() {
       const formData = new FormData();
       formData.append('file', file);
       try {
-          // LLAMADA A LA API DE CLOUDINARY
           const res = await fetch('/api/upload', { method: 'POST', body: formData });
           if (res.ok) {
               const data = await res.json();
-              setForm(prev => ({ ...prev, imagen: data.url })); // Guardar URL
+              setForm(prev => ({ ...prev, imagen: data.url }));
           } else alert("Error al subir imagen");
       } catch (error) { alert("Error de conexión"); } finally { setUploading(false); }
   };
@@ -321,8 +315,8 @@ export default function AdminProductsPage() {
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div className="flex-1 w-full md:w-auto bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex gap-3 items-center focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-           <Search className="w-5 h-5 text-slate-400" />
-           <input type="text" placeholder="Buscar productos..." className="flex-1 outline-none text-slate-700 font-medium placeholder:text-slate-400" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Search className="w-5 h-5 text-slate-400" />
+            <input type="text" placeholder="Buscar productos..." className="flex-1 outline-none text-slate-700 font-medium placeholder:text-slate-400" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         {isAdmin && (
             <div className="flex gap-2">
@@ -332,55 +326,108 @@ export default function AdminProductsPage() {
         )}
       </div>
 
-      {/* TABLA */}
+      {/* TABLA CON ACCORDEÓN */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[900px]">
           <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-bold tracking-wider border-b border-slate-200">
-            <tr>
-              <th className="p-5">Producto</th>
-              <th className="p-5">Clasificación</th>
-              <th className="p-5">Precio Público</th>
-              {isAdmin && <th className="p-5 text-rose-600">Costo (Admin)</th>}
-              <th className="p-5 text-center">Stock</th>
-              {isAdmin && <th className="p-5 text-center">Acciones</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 text-sm">
-            {loading ? ( <tr><td colSpan={isAdmin ? 7 : 5} className="p-10 text-center text-slate-400 font-medium">Cargando catálogo...</td></tr> ) : products.length === 0 ? ( <tr><td colSpan={isAdmin ? 7 : 5} className="p-10 text-center text-slate-400">No se encontraron productos.</td></tr> ) : (
-              products.map((prod) => (
-                <tr key={prod.idproducto} className="hover:bg-indigo-50/30 transition duration-150">
-                  {/* CELDA CON IMAGEN */}
-                  <td className="p-5 flex items-center gap-3">
-                      <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
-                          {prod.imagen ? <img src={prod.imagen} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon className="w-6 h-6"/></div>}
-                      </div>
-                      <div>
-                          <div className="font-bold text-slate-700 text-base">{prod.nombre_producto}</div>
-                          <div className="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded w-fit mt-1">{prod.codigo_barra}</div>
-                      </div>
-                  </td>
-                  <td className="p-5">
-                      <div className="text-xs font-bold text-indigo-600">{getCatName(prod.idcategoria)}</div>
-                      {prod.idsubcategoria > 0 && <div className="text-[10px] text-indigo-400 font-medium">↳ {subcategories.find(s => s.idsubcategoria === prod.idsubcategoria)?.nombre_subcategoria}</div>}
-                      <div className="text-[10px] text-slate-400">{getBrandName(prod.idmarca || 0)}</div>
-                  </td>
-                  <td className="p-5 font-bold text-slate-700">L. {Number(prod.precio_venta).toFixed(2)}</td>
-                  {isAdmin && <td className="p-5 font-bold text-rose-600 bg-rose-50/30">L. {Number(prod.precio_compra).toFixed(2)}</td>}
-                  <td className="p-5 text-center"><span className={`px-3 py-1 rounded-full font-bold text-xs ${Number(prod.stock) <= Number(prod.stock_min) ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>{prod.stock}</span></td>
-                  {isAdmin && (
-                      <td className="p-5 flex justify-center gap-2">
-                          <button onClick={() => handleOpenAdjust(prod)} className="text-amber-600 hover:text-amber-800 font-bold bg-amber-50 hover:bg-amber-100 px-3 py-2 rounded-xl transition flex items-center gap-1" title="Ajuste de Inventario"><Scale className="w-4 h-4"/></button>
-                          <button onClick={() => handleOpenEdit(prod)} className="text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-xl transition flex items-center gap-1"><Pencil className="w-4 h-4"/></button>
-                      </td>
-                  )}
+                <tr>
+                    <th className="p-5 w-10"></th>
+                    <th className="p-5">Producto</th>
+                    <th className="p-5">Clasificación</th>
+                    <th className="p-5">Precio Público</th>
+                    {isAdmin && <th className="p-5 text-rose-600">Costo (Admin)</th>}
+                    <th className="p-5 text-center">Stock</th>
+                    <th className="p-5 text-center">Acciones</th>
                 </tr>
+            </thead>
+          <tbody className="divide-y divide-slate-100 text-sm">
+            {loading ? ( <tr><td colSpan={isAdmin ? 7 : 6} className="p-10 text-center text-slate-400 font-medium">Cargando catálogo...</td></tr> ) : products.length === 0 ? ( <tr><td colSpan={isAdmin ? 7 : 6} className="p-10 text-center text-slate-400">No se encontraron productos.</td></tr> ) : (
+              products.map((prod) => (
+                <React.Fragment key={prod.idproducto}>
+                    <tr className={`hover:bg-indigo-50/30 transition duration-150 ${expandedRows.includes(prod.idproducto!) ? 'bg-indigo-50/50' : ''}`}>
+                      {/* BOTÓN EXPANDIR */}
+                      <td className="p-5">
+                        <button 
+                            onClick={() => toggleRow(prod.idproducto!)}
+                            className={`p-1.5 rounded-lg transition-all ${expandedRows.includes(prod.idproducto!) ? 'bg-indigo-600 text-white rotate-180' : 'bg-slate-100 text-slate-400 hover:bg-indigo-100 hover:text-indigo-600'}`}
+                        >
+                            <ChevronDown className="w-4 h-4" />
+                        </button>
+                      </td>
+                      <td className="p-5 flex items-center gap-3">
+                          <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
+                              {prod.imagen ? <img src={prod.imagen} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon className="w-6 h-6"/></div>}
+                          </div>
+                          <div>
+                              <div className="font-bold text-slate-700 text-base">{prod.nombre_producto}</div>
+                              <div className="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded w-fit mt-1">{prod.codigo_barra}</div>
+                          </div>
+                      </td>
+                      <td className="p-5">
+                          <div className="text-xs font-bold text-indigo-600">{getCatName(prod.idcategoria)}</div>
+                          <div className="text-[10px] text-slate-400">{getBrandName(prod.idmarca || 0)}</div>
+                      </td>
+                      <td className="p-5 font-bold text-slate-700">L. {Number(prod.precio_venta).toFixed(2)}</td>
+                      {isAdmin && <td className="p-5 font-bold text-rose-600 bg-rose-50/30">L. {Number(prod.precio_compra).toFixed(2)}</td>}
+                      <td className="p-5 text-center"><span className={`px-3 py-1 rounded-full font-bold text-xs ${Number(prod.stock) <= Number(prod.stock_min) ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>{prod.stock}</span></td>
+                      <td className="p-5">
+                          <div className="flex justify-center gap-2">
+                            {isAdmin ? (
+                                <>
+                                    <button onClick={() => handleOpenAdjust(prod)} className="text-amber-600 hover:text-amber-800 font-bold bg-amber-50 hover:bg-amber-100 px-3 py-2 rounded-xl transition flex items-center gap-1" title="Ajuste de Inventario"><Scale className="w-4 h-4"/></button>
+                                    <button onClick={() => handleOpenEdit(prod)} className="text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-xl transition flex items-center gap-1"><Pencil className="w-4 h-4"/></button>
+                                </>
+                            ) : (
+                                <span className="text-xs text-slate-400 italic font-medium">Solo lectura</span>
+                            )}
+                          </div>
+                      </td>
+                    </tr>
+
+                    {/* FILA EXPANDIDA (ACCORDEÓN) */}
+                    {expandedRows.includes(prod.idproducto!) && (
+                        <tr className="bg-slate-50/50 animate-in slide-in-from-top-1 duration-200">
+                            <td colSpan={isAdmin ? 7 : 6} className="p-0 border-l-4 border-indigo-500">
+                                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+                                    <div className="col-span-2">
+                                        <h4 className="text-[10px] uppercase font-black text-slate-400 mb-2 tracking-widest flex items-center gap-2">
+                                            <Search className="w-3 h-3" /> Descripción y Notas
+                                        </h4>
+                                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm min-h-[80px]">
+                                            <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line italic">
+                                                {prod.descripcion || "Sin descripción disponible para este producto."}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                                        <h4 className="text-[10px] uppercase font-black text-slate-400 mb-2 tracking-widest flex items-center gap-2">
+                                            <Plus className="w-3 h-3" /> Especificaciones
+                                        </h4>
+                                        <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100">
+                                            <span className="text-slate-400 font-bold uppercase">Subcategoría</span>
+                                            <span className="text-slate-700 font-black">{subcategories.find(s => s.idsubcategoria === prod.idsubcategoria)?.nombre_subcategoria || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100">
+                                            <span className="text-slate-400 font-bold uppercase">Presentación</span>
+                                            <span className="text-slate-700 font-black">{presentations.find(p => p.idpresentacion === prod.idpresentacion)?.nombre_presentacion || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400 font-bold uppercase">Perecedero</span>
+                                            <span className={`font-black ${prod.perecedero ? 'text-rose-500' : 'text-slate-700'}`}>{prod.perecedero ? 'SÍ (VENCE)' : 'NO'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    )}
+                </React.Fragment>
               ))
             )}
           </tbody>
         </table>
       </div>
 
-      {/* MODAL CREAR/EDITAR (Solo Admin) */}
+      {/* MODALES EXISTENTES */}
       {showModal && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] relative">
@@ -391,8 +438,6 @@ export default function AdminProductsPage() {
             </div>
             <div className="overflow-y-auto p-8 custom-scrollbar">
               <form onSubmit={handleSaveProduct} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* --- ÁREA DE SUBIDA DE IMAGEN (NUEVO) --- */}
                 <div className="col-span-1 flex flex-col items-center justify-center bg-slate-50 rounded-2xl border border-slate-100 p-4">
                     <div className="w-40 h-40 rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition relative overflow-hidden group bg-white shadow-sm" onClick={() => fileInputRef.current?.click()}>
                         {form.imagen ? (
@@ -410,7 +455,6 @@ export default function AdminProductsPage() {
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
                     {form.imagen && <button type="button" onClick={() => setForm(p => ({...p, imagen: ''}))} className="mt-3 text-xs text-rose-500 font-bold hover:underline">Eliminar Foto</button>}
                 </div>
-
                 <div className="col-span-1 md:col-span-2 space-y-4">
                   <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nombre del Producto *</label><input required type="text" className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition font-medium" value={form.nombre_producto} onChange={e => setForm({...form, nombre_producto: e.target.value})} /></div>
                   <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Código de Barra</label><input type="text" className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition font-mono text-sm" value={form.codigo_barra} onChange={e => setForm({...form, codigo_barra: e.target.value})} /></div>
@@ -419,23 +463,18 @@ export default function AdminProductsPage() {
                      <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Stock Mínimo</label><input type="number" className="w-full p-3 border border-slate-200 rounded-xl bg-white text-center" value={form.stock_min} onChange={e => setForm({...form, stock_min: e.target.value === '' ? 0 : parseFloat(e.target.value)})} /></div>
                   </div>
                 </div>
-
                 <div className="col-span-1 md:col-span-3"><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Descripción / Compatibilidad</label><textarea className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white outline-none transition h-20 text-sm resize-none" placeholder="Ej. Compatible con Toyota Corolla 2009-2013..." value={form.descripcion || ''} onChange={e => setForm({...form, descripcion: e.target.value})} /></div>
-                
                 <div className="col-span-1 md:col-span-3 border-t border-slate-100 my-2"></div>
                 <h4 className="col-span-1 md:col-span-3 text-sm font-bold text-indigo-600 uppercase tracking-wider">Precios</h4>
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Costo (Compra) *</label><input required type="number" step="0.01" className="w-full p-3 border border-slate-200 rounded-xl" value={form.precio_compra} onChange={e => setForm({...form, precio_compra: parseFloat(e.target.value)})} /></div>
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Precio Público *</label><input required type="number" step="0.01" className="w-full p-3 border-2 border-indigo-100 bg-indigo-50/30 rounded-xl font-bold text-indigo-900" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: parseFloat(e.target.value)})} /></div>
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Mayoreo</label><input required type="number" step="0.01" className="w-full p-3 border border-slate-200 rounded-xl" value={form.precio_venta_mayoreo} onChange={e => setForm({...form, precio_venta_mayoreo: parseFloat(e.target.value)})} /></div>
-                
                 <div className="col-span-1 md:col-span-3 border-t border-slate-100 my-2"></div>
                 <h4 className="col-span-1 md:col-span-3 text-sm font-bold text-indigo-600 uppercase tracking-wider">Clasificación</h4>
-                
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Categoría *</label><div className="flex gap-2"><select required className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500 transition" value={form.idcategoria} onChange={e => setForm({...form, idcategoria: parseInt(e.target.value)})}>{categories.map(cat => <option key={cat.idcategoria} value={cat.idcategoria}>{cat.nombre_categoria}</option>)}</select><button type="button" onClick={() => handleOpenQuick('cat')} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition"><Plus className="w-5 h-5" /></button></div></div>
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Subcategoría</label><div className="flex gap-2"><select className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500 transition disabled:bg-slate-100" value={form.idsubcategoria} onChange={e => setForm({...form, idsubcategoria: parseInt(e.target.value)})} disabled={!form.idcategoria}><option value={0}>Seleccione...</option>{filteredSubcats.map(sub => <option key={sub.idsubcategoria} value={sub.idsubcategoria}>{sub.nombre_subcategoria}</option>)}</select><button type="button" onClick={() => handleOpenQuick('subcat')} disabled={!form.idcategoria} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition disabled:opacity-50"><Plus className="w-5 h-5" /></button></div></div>
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Marca</label><div className="flex gap-2"><select className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500 transition" value={form.idmarca} onChange={e => setForm({...form, idmarca: parseInt(e.target.value)})}>{brands.map(brand => <option key={brand.idmarca} value={brand.idmarca}>{brand.nombre_marca}</option>)}</select><button type="button" onClick={() => handleOpenQuick('brand')} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition"><Plus className="w-5 h-5" /></button></div></div>
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Presentación</label><div className="flex gap-2"><select required className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500 transition" value={form.idpresentacion} onChange={e => setForm({...form, idpresentacion: parseInt(e.target.value)})}>{presentations.map(pres => <option key={pres.idpresentacion} value={pres.idpresentacion}>{pres.nombre_presentacion}</option>)}</select><button type="button" onClick={() => handleOpenQuick('pres')} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition"><Plus className="w-5 h-5" /></button></div></div>
-                
                 <div className="col-span-1 md:col-span-3 pt-2">
                   <label className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
                     <input type="checkbox" className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500" checked={form.perecedero === 1} onChange={e => setForm({...form, perecedero: e.target.checked ? 1 : 0})} />
@@ -452,9 +491,7 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      {/* MODAL AJUSTE INVENTARIO */}
       {showAdjustModal && isAdmin && selectedProduct && <AdjustStockModal isOpen={showAdjustModal} product={selectedProduct} onClose={() => setShowAdjustModal(false)} onSave={handleSaveAdjust} />}
-      {/* MODAL HISTORIAL */}
       {showHistoryModal && isAdmin && <HistoryModal isOpen={showHistoryModal} onClose={() => setShowHistoryModal(false)} />}
     </div>
   );
