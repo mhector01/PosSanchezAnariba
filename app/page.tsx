@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Info, X, ChevronRight, LayoutDashboard, Image as ImageIcon } from 'lucide-react'; 
+// --- AGREGAMOS 'Plus' DE LUCIDE ---
+import { Info, X, ChevronRight, LayoutDashboard, Image as ImageIcon, Plus } from 'lucide-react'; 
 import { useAuth } from '@/context/AuthContext';
 
 // --- Interfaces ---
@@ -16,7 +17,7 @@ interface Producto {
   stock: string | number;
   idcategoria: number;
   idsubcategoria?: number;
-  imagen?: string; // <--- NUEVO CAMPO
+  imagen?: string;
 }
 
 interface CartItem extends Producto {
@@ -46,7 +47,6 @@ interface Comprobante {
 interface Category { idcategoria: number; nombre_categoria: string; }
 interface Subcategory { idsubcategoria: number; nombre_subcategoria: string; idcategoria: number; }
 
-// Solo el ADMIN (1) puede editar precios manualmente
 const ROLES_PERMITIDOS = [1];
 
 export default function POS() {
@@ -68,7 +68,6 @@ export default function POS() {
   const [cashAmount, setCashAmount] = useState('');
   const [showCloseModal, setShowCloseModal] = useState(false);
 
-  // Filtros
   const [products, setProducts] = useState<Producto[]>([]);
   const [allProducts, setAllProducts] = useState<Producto[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -94,6 +93,15 @@ export default function POS() {
     recibido: '',
     notas: '',
     idComprobante: 1 
+  });
+
+  // --- ESTADOS NUEVO CLIENTE RAPIDO ---
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+      nombre_cliente: '',
+      numero_nit: '',
+      numero_telefono: ''
   });
 
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -186,10 +194,11 @@ export default function POS() {
   }, [selectedCat, selectedSubCat, allProducts]);
 
   useEffect(() => {
-    if (!showBatchModal && !showPaymentModal && !showCloseModal && !loading && !infoProduct) {
+    // Evitamos autofocus si hay CUALQUIER modal abierto
+    if (!showBatchModal && !showPaymentModal && !showCloseModal && !showCustomerModal && !loading && !infoProduct) {
        setTimeout(() => searchInputRef.current?.focus(), 100);
     }
-  }, [showBatchModal, showPaymentModal, showCloseModal, loading, infoProduct]);
+  }, [showBatchModal, showPaymentModal, showCloseModal, showCustomerModal, loading, infoProduct]);
 
   // =========================================
   // LÓGICA
@@ -281,6 +290,36 @@ export default function POS() {
       const list = Array.isArray(data) ? data : (data.data || []);
       if (Array.isArray(list)) setCustomers(list);
     } catch (e) { console.error(e); }
+  };
+
+  // --- FUNCIÓN CREAR CLIENTE RÁPIDO ---
+  const handleCreateCustomer = async () => {
+      if (!newCustomer.nombre_cliente.trim()) return alert("El nombre del cliente es obligatorio.");
+      setSavingCustomer(true);
+      try {
+          const res = await fetch('/api/customers', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...newCustomer, estado: 1 })
+          });
+          const data = await res.json();
+          if (res.ok) {
+              // Recargar clientes
+              await fetchCustomers();
+              // Si el backend devuelve el ID insertado, lo seleccionamos automáticamente
+              if (data.id || data.idcliente) {
+                  setPaymentForm(prev => ({ ...prev, idCliente: data.id || data.idcliente }));
+              }
+              setShowCustomerModal(false);
+              setNewCustomer({ nombre_cliente: '', numero_nit: '', numero_telefono: '' });
+          } else {
+              alert(data.error || 'Ocurrió un error al guardar el cliente');
+          }
+      } catch (error) {
+          alert("Error de conexión al guardar cliente.");
+      } finally {
+          setSavingCustomer(false);
+      }
   };
 
   const fetchBatches = async (productId: number) => {
@@ -570,11 +609,31 @@ export default function POS() {
               </div>
               <div className="mt-8 text-[10px] text-slate-500 text-center relative z-10">Imza Pos • Sistema POS v2.0</div>
             </div>
-            <div className="p-6 lg:p-8 lg:w-2/3 bg-white overflow-y-auto custom-scrollbar">
+            <div className="p-6 lg:p-8 lg:w-2/3 bg-white overflow-y-auto custom-scrollbar relative">
               <div className="flex justify-between items-start mb-6"><div><h2 className="text-xl font-extrabold text-slate-800">Procesar Pago</h2><p className="text-gray-400 text-xs mt-1">Selecciona método y cliente.</p></div><button onClick={() => setShowPaymentModal(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition text-xl">✕</button></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="col-span-1"><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Tipo Comprobante</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.idComprobante} onChange={(e) => setPaymentForm({...paymentForm, idComprobante: Number(e.target.value)})}>{tipoComprobantes.map(tc => (<option key={tc.idcomprobante} value={tc.idcomprobante}>{tc.nombre_comprobante} (Prox: #{tc.siguiente_numero})</option>))}</select></div>
-                <div className="col-span-1"><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Cliente</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.idCliente} onChange={(e) => setPaymentForm({...paymentForm, idCliente: Number(e.target.value)})}>{customers.map(c => <option key={c.idcliente} value={c.idcliente}>{c.nombre_cliente}</option>)}{customers.length === 0 && <option value="1">Público General</option>}</select></div>
+                
+                <div className="col-span-1">
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Tipo Comprobante</label>
+                    <select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.idComprobante} onChange={(e) => setPaymentForm({...paymentForm, idComprobante: Number(e.target.value)})}>
+                        {tipoComprobantes.map(tc => (<option key={tc.idcomprobante} value={tc.idcomprobante}>{tc.nombre_comprobante} (Prox: #{tc.siguiente_numero})</option>))}
+                    </select>
+                </div>
+                
+                {/* MODIFICACIÓN: LABEL DE CLIENTE CON BOTÓN PLUS */}
+                <div className="col-span-1">
+                    <div className="flex justify-between items-end mb-1.5">
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Cliente</label>
+                        <button onClick={() => setShowCustomerModal(true)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-800 p-1 rounded transition-colors flex items-center gap-1 text-[10px] font-bold px-2" title="Agregar nuevo cliente rápido">
+                            <Plus className="w-3 h-3" /> NUEVO
+                        </button>
+                    </div>
+                    <select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.idCliente} onChange={(e) => setPaymentForm({...paymentForm, idCliente: Number(e.target.value)})}>
+                        {customers.map(c => <option key={c.idcliente} value={c.idcliente}>{c.nombre_cliente}</option>)}
+                        {customers.length === 0 && <option value="1">Público General</option>}
+                    </select>
+                </div>
+
                 <div><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Método Pago</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.metodoPago} onChange={(e) => setPaymentForm({...paymentForm, metodoPago: e.target.value, recibido: ''})}><option value="Efectivo">💵 Efectivo</option><option value="Tarjeta">💳 Tarjeta</option><option value="Deposito">🏦 Depósito</option></select></div>
                 <div><label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Condición</label><select className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-medium focus:bg-white focus:border-indigo-500 outline-none transition-all cursor-pointer" value={paymentForm.condicion} onChange={(e) => setPaymentForm({...paymentForm, condicion: e.target.value})}><option value="Contado">Contado</option><option value="Credito">Crédito</option></select></div>
               </div>
@@ -590,6 +649,40 @@ export default function POS() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* --- MODAL AGREGAR CLIENTE RÁPIDO --- */}
+      {showCustomerModal && (
+          <div className="absolute inset-0 bg-slate-900/60 z-[80] flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
+              <div className="bg-white w-full max-w-sm p-6 rounded-3xl shadow-2xl relative border border-gray-100">
+                  <div className="flex justify-between items-center mb-6">
+                      <div>
+                          <h3 className="text-xl font-extrabold text-slate-800">Nuevo Cliente</h3>
+                          <p className="text-xs text-slate-400 mt-1">Agrega los datos básicos del comprador.</p>
+                      </div>
+                      <button onClick={() => setShowCustomerModal(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition">✕</button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Nombre Completo *</label>
+                          <input type="text" className="w-full p-3 border border-gray-200 bg-gray-50 focus:bg-white rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium text-slate-700" value={newCustomer.nombre_cliente} onChange={e => setNewCustomer({...newCustomer, nombre_cliente: e.target.value})} placeholder="Ej. Juan Pérez" autoFocus />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">RTN / DNI (Opcional)</label>
+                          <input type="text" className="w-full p-3 border border-gray-200 bg-gray-50 focus:bg-white rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium text-slate-700" value={newCustomer.numero_nit} onChange={e => setNewCustomer({...newCustomer, numero_nit: e.target.value})} placeholder="Ej. 0801-1990-12345" />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Teléfono (Opcional)</label>
+                          <input type="text" className="w-full p-3 border border-gray-200 bg-gray-50 focus:bg-white rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium text-slate-700" value={newCustomer.numero_telefono} onChange={e => setNewCustomer({...newCustomer, numero_telefono: e.target.value})} placeholder="Ej. 9999-9999" />
+                      </div>
+                      
+                      <button onClick={handleCreateCustomer} disabled={savingCustomer} className="w-full mt-4 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                          {savingCustomer ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Guardar Cliente"}
+                      </button>
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* --- PANEL IZQUIERDO --- */}
