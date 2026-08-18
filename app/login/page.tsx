@@ -47,8 +47,8 @@ export default function LoginPage() {
     <div className="h-screen flex items-center justify-center bg-slate-900">
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-24 h-24 mx-auto mb-3 flex items-center justify-center">
-            <img src="/logoSA.jpeg" alt="Logo Grupo Sánchez Anariba" className="max-h-full max-w-full object-contain rounded-xl shadow-sm" />
+          <div className="w-full h-32 mx-auto mb-4 flex items-center justify-center p-2">
+            <img src="/logo.png" alt="Logo Grupo Sánchez Anariba" className="max-h-full max-w-full object-contain filter drop-shadow-sm" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Iniciar Sesión</h1>
           <p className="text-slate-500 text-sm font-semibold">Grupo Sánchez Anariba</p>

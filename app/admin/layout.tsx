@@ -97,7 +97,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         
         {/* LOGO */}
         <div className="h-20 flex items-center px-4 border-b border-slate-800 bg-[#1e293b]/50 gap-3">
-          <img src="/logoSA.jpeg" alt="Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-0.5 shadow-md shrink-0" />
+          <div className="w-12 h-12 rounded-xl bg-white/95 p-1 shadow-md shrink-0 flex items-center justify-center">
+            <img src="/logo.png" alt="Logo Grupo Sánchez Anariba" className="w-full h-full object-contain" />
+          </div>
           {isSidebarOpen && (
             <div className="overflow-hidden whitespace-nowrap animate-in fade-in duration-300">
               <h1 className="font-bold text-white tracking-tight text-sm truncate">Grupo Sánchez Anariba</h1>

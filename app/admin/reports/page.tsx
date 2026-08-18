@@ -144,7 +144,7 @@ export default function ReportsPage() {
         
         {/* ENCABEZADO PARA IMPRESIÓN */}
         <div className="hidden print:block mb-8 text-center border-b-2 border-black pb-4">
-            <img src="/logoSA.jpeg" alt="Logo" className="w-16 h-auto mx-auto mb-2" />
+            <img src="/logo.png" alt="Logo Grupo Sánchez Anariba" className="w-32 h-auto mx-auto mb-3 object-contain" />
             <h2 className="text-2xl font-black uppercase text-black">
                 {activeTab === 'inventory' ? 'Reporte de Inventario General' : 
                  activeTab === 'items_by_category' ? `Detalle de Inventario: ${selectedCategory}` :

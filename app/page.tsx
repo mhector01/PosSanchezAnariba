@@ -688,7 +688,7 @@ export default function POS() {
       {/* --- PANEL IZQUIERDO --- */}
       <div className="w-[68%] flex flex-col p-6 h-full">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-3"><img src="/logoSA.jpeg" alt="Logo Grupo Sánchez Anariba" className="w-10 h-10 object-contain rounded-xl shadow-sm bg-white p-0.5" /><div className="flex flex-col"><h1 className="text-xl font-black text-slate-800 tracking-tight">Grupo Sánchez Anariba <span className="text-indigo-600">POS</span></h1><p className="text-xs text-slate-400 font-medium">Panel de Venta</p></div></div>
+          <div className="flex items-center gap-3.5"><div className="w-14 h-14 bg-white p-1 rounded-xl shadow-sm border border-slate-100 flex items-center justify-center shrink-0"><img src="/logo.png" alt="Logo Grupo Sánchez Anariba" className="w-full h-full object-contain" /></div><div className="flex flex-col"><h1 className="text-xl font-black text-slate-800 tracking-tight">Grupo Sánchez Anariba <span className="text-indigo-600">POS</span></h1><p className="text-xs text-slate-400 font-medium">Panel de Venta</p></div></div>
           <div className="flex gap-3">
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold">{user.name.charAt(0)}</div><div className="text-sm"><p className="font-bold text-slate-700">{user.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{user.tipo_usuario === 1 ? 'Administrador' : 'Vendedor'}</p></div></div>
              
