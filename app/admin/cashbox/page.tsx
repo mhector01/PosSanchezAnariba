@@ -378,7 +378,8 @@ export default function CashboxPage() {
       {ticketData && (
         <div id="ticket-print" style={{display: 'none'}}>
             <div style={{textAlign: 'center', marginBottom: '10px'}}>
-                <h2 style={{margin: 0, fontSize: '14px', fontWeight: 'bold'}}>FARMACIA IVIS</h2>
+                <img src="/logoSA.jpeg" alt="Logo" style={{width: '60px', height: 'auto', margin: '0 auto 5px auto', display: 'block'}} />
+                <h2 style={{margin: 0, fontSize: '14px', fontWeight: 'bold'}}>GRUPO SÁNCHEZ ANARIBA</h2>
                 <p style={{margin: 0, fontSize: '10px'}}>{ticketData.isReprint ? 'REIMPRESION DE CIERRE' : 'REPORTE DE CORTE Z'}</p>
                 <p style={{margin: 0, fontSize: '10px'}}>Fecha: {ticketData.fecha} {ticketData.hora}</p>
                 <p style={{margin: 0, fontSize: '10px'}}>Caja ID: #{ticketData.id}</p>

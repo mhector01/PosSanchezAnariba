@@ -607,7 +607,7 @@ export default function POS() {
                   <div className="flex flex-col gap-1 pt-1"><span className="text-slate-400 text-xs uppercase tracking-wider">Total a Pagar</span><div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">L. {total.toFixed(2)}</div></div>
                 </div>
               </div>
-              <div className="mt-8 text-[10px] text-slate-500 text-center relative z-10">Imza Pos • Sistema POS v2.0</div>
+              <div className="mt-8 text-[10px] text-slate-500 text-center relative z-10">Grupo Sánchez Anariba • Sistema POS v2.0</div>
             </div>
             <div className="p-6 lg:p-8 lg:w-2/3 bg-white overflow-y-auto custom-scrollbar relative">
               <div className="flex justify-between items-start mb-6"><div><h2 className="text-xl font-extrabold text-slate-800">Procesar Pago</h2><p className="text-gray-400 text-xs mt-1">Selecciona método y cliente.</p></div><button onClick={() => setShowPaymentModal(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition text-xl">✕</button></div>
@@ -688,7 +688,7 @@ export default function POS() {
       {/* --- PANEL IZQUIERDO --- */}
       <div className="w-[68%] flex flex-col p-6 h-full">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex flex-col"><h1 className="text-2xl font-black text-slate-800 tracking-tight">Imza <span className="text-indigo-600">POS</span></h1><p className="text-sm text-slate-400 font-medium">Panel de Venta</p></div>
+          <div className="flex items-center gap-3"><img src="/logoSA.jpeg" alt="Logo Grupo Sánchez Anariba" className="w-10 h-10 object-contain rounded-xl shadow-sm bg-white p-0.5" /><div className="flex flex-col"><h1 className="text-xl font-black text-slate-800 tracking-tight">Grupo Sánchez Anariba <span className="text-indigo-600">POS</span></h1><p className="text-xs text-slate-400 font-medium">Panel de Venta</p></div></div>
           <div className="flex gap-3">
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold">{user.name.charAt(0)}</div><div className="text-sm"><p className="font-bold text-slate-700">{user.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{user.tipo_usuario === 1 ? 'Administrador' : 'Vendedor'}</p></div></div>
              

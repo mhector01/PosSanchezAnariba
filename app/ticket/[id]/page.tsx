@@ -118,8 +118,8 @@ export default function TicketPage() {
       <div className="text-center mb-2 flex flex-col items-center">
         {/* LOGO AUMENTADO DE TAMAÑO PARA MEJOR VISIBILIDAD */}
         <img 
-            src="/logo.png" 
-            alt="Logo" 
+            src="/logoSA.jpeg" 
+            alt="Logo Grupo Sánchez Anariba" 
             className="w-32 h-24 object-contain mb-1" 
         />
         <h1 className="text-sm font-bold uppercase mb-1">{company.nombre_empresa}</h1>

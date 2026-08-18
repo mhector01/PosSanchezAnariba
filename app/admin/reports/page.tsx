@@ -144,6 +144,7 @@ export default function ReportsPage() {
         
         {/* ENCABEZADO PARA IMPRESIÓN */}
         <div className="hidden print:block mb-8 text-center border-b-2 border-black pb-4">
+            <img src="/logoSA.jpeg" alt="Logo" className="w-16 h-auto mx-auto mb-2" />
             <h2 className="text-2xl font-black uppercase text-black">
                 {activeTab === 'inventory' ? 'Reporte de Inventario General' : 
                  activeTab === 'items_by_category' ? `Detalle de Inventario: ${selectedCategory}` :
@@ -151,7 +152,7 @@ export default function ReportsPage() {
                  'Reporte de Productos Bajo Stock'}
             </h2>
             <div className="flex justify-between mt-2 text-sm text-black font-medium">
-                <p>Farmacia Ivis</p>
+                <p>Grupo Sánchez Anariba</p>
                 <p>Fecha: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
             </div>
         </div>

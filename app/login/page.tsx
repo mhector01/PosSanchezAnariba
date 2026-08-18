@@ -47,11 +47,11 @@ export default function LoginPage() {
     <div className="h-screen flex items-center justify-center bg-slate-900">
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-            🔒
+          <div className="w-24 h-24 mx-auto mb-3 flex items-center justify-center">
+            <img src="/logoSA.jpeg" alt="Logo Grupo Sánchez Anariba" className="max-h-full max-w-full object-contain rounded-xl shadow-sm" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Iniciar Sesión</h1>
-          <p className="text-slate-500 text-sm">Sistema de Farmacia</p>
+          <p className="text-slate-500 text-sm font-semibold">Grupo Sánchez Anariba</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

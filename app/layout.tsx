@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ImzaPos",
-  description: "Sistema de facturacion e inventarios",
+  title: "Grupo Sánchez Anariba - POS",
+  description: "Sistema de facturación e inventarios - Grupo Sánchez Anariba",
 };
 
 export default function RootLayout({

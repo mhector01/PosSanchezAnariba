@@ -1,6 +1,6 @@
-# Imza POS
+# Grupo Sánchez Anariba - POS
 
-**Sistema de facturación e inventarios para farmacia** — Point of Sale y gestión empresarial construido con Next.js.
+**Sistema de facturación e inventarios para Grupo Sánchez Anariba** — Point of Sale y gestión empresarial construido con Next.js.
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## Descripción General
 
-**Imza POS** es un sistema integral de punto de venta diseñado para farmacias. Gestiona ventas, inventarios, caja, comprobantes fiscales (RTN/CAI conforme a normativa hondureña), usuarios, reportes y más. Cuenta con un terminal POS optimizado para lectura de código de barras, un panel administrativo con indicadores clave y generación de tickets térmicos con formato fiscal.
+**Grupo Sánchez Anariba - POS** es un sistema integral de punto de venta y gestión empresarial. Gestiona ventas, inventarios, caja, comprobantes fiscales (RTN/CAI conforme a normativa hondureña), usuarios, reportes y más. Cuenta con un terminal POS optimizado para lectura de código de barras, un panel administrativo con indicadores clave y generación de tickets térmicos con formato fiscal.
 
 ---
 

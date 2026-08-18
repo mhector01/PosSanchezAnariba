@@ -96,11 +96,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className={`${isSidebarOpen ? 'w-72' : 'w-20'} bg-[#0f172a] text-slate-300 flex flex-col shadow-2xl z-30 transition-all duration-300 ease-in-out`}>
         
         {/* LOGO */}
-        <div className="h-20 flex items-center px-6 border-b border-slate-800 bg-[#1e293b]/50">
-          <div className="min-w-[40px] h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-500/20">F+</div>
+        <div className="h-20 flex items-center px-4 border-b border-slate-800 bg-[#1e293b]/50 gap-3">
+          <img src="/logoSA.jpeg" alt="Logo" className="w-10 h-10 object-contain rounded-lg bg-white p-0.5 shadow-md shrink-0" />
           {isSidebarOpen && (
-            <div className="ml-4 overflow-hidden whitespace-nowrap animate-in fade-in duration-300">
-              <h1 className="font-bold text-white tracking-tight">Imza POS</h1>
+            <div className="overflow-hidden whitespace-nowrap animate-in fade-in duration-300">
+              <h1 className="font-bold text-white tracking-tight text-sm truncate">Grupo Sánchez Anariba</h1>
               <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">
                 {Number(user?.tipo_usuario) === 1 ? 'Administrador' : 'Cajero'}
               </p>
