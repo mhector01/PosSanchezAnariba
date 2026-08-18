@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import bcrypt from 'bcryptjs';
 
 // --- LISTAR USUARIOS (Usando tu vista view_usuarios) ---
 export async function GET() {
@@ -46,11 +47,12 @@ export async function POST(request: Request) {
         );
         const idEmpleado = resEmp.insertId;
 
-        // 3. Insertar Usuario vinculado al Empleado
+        // 3. Insertar Usuario vinculado al Empleado (Encriptar contraseña)
+        const hashedPassword = await bcrypt.hash(password, 10);
         await connection.query(
             `INSERT INTO usuario (usuario, contrasena, tipo_usuario, estado, idempleado) 
              VALUES (?, ?, ?, 1, ?)`,
-            [usuario, password, tipo_usuario, idEmpleado] // Nota: En producción usa bcrypt para password
+            [usuario, hashedPassword, tipo_usuario, idEmpleado]
         );
 
         await connection.commit();
@@ -92,12 +94,13 @@ export async function PUT(request: Request) {
 
         // 2. Actualizar Usuario
         let queryUsuario = `UPDATE usuario SET usuario = ?, tipo_usuario = ?`;
-        let paramsUsuario = [usuario, tipo_usuario];
+        let paramsUsuario: any[] = [usuario, tipo_usuario];
 
-        // Solo actualizamos contraseña si enviaron una nueva
+        // Solo actualizamos contraseña si enviaron una nueva (Encriptar contraseña)
         if (password && password.trim() !== "") {
+            const hashedPassword = await bcrypt.hash(password, 10);
             queryUsuario += `, contrasena = ?`;
-            paramsUsuario.push(password);
+            paramsUsuario.push(hashedPassword);
         }
 
         queryUsuario += ` WHERE idusuario = ?`;
