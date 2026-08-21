@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { requireAdminRole } from '@/lib/auth';
 
 // 1. GET: Search Products (Updated to include subcategory)
 export async function GET(request: Request) {
@@ -71,6 +72,9 @@ export async function GET(request: Request) {
 
 // 2. POST: Create New Product (Updated with subcategory AND imagen)
 export async function POST(request: Request) {
+  if (!(await requireAdminRole())) {
+    return NextResponse.json({ error: 'No tienes permiso para crear productos' }, { status: 403 });
+  }
   try {
     const body = await request.json();
     const { 
@@ -153,6 +157,9 @@ export async function POST(request: Request) {
 
 // 3. PUT: Update Product (Updated with subcategory AND imagen)
 export async function PUT(request: Request) {
+  if (!(await requireAdminRole())) {
+    return NextResponse.json({ error: 'No tienes permiso para editar productos' }, { status: 403 });
+  }
   try {
     const body = await request.json();
     const { 
