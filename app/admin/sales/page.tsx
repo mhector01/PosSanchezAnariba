@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
 
 // Definición de tipos
 interface Sale {
@@ -23,6 +24,8 @@ interface HistoryRecord {
 }
 
 export default function AdminSalesHistory() {
+  const { user } = useAuth();
+  const isAdmin = Number(user?.tipo_usuario) === 1;
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(false);
   
@@ -296,7 +299,9 @@ export default function AdminSalesHistory() {
 
                         <button onClick={() => openTicket(sale.idventa)} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 transition shadow-sm" title="Imprimir Ticket">🖨️</button>
                         
-                        <Link href={`/admin/sales/edit/${sale.idventa}`} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition shadow-sm" title="Editar">✏️</Link>
+                        {isAdmin && (
+                          <Link href={`/admin/sales/edit/${sale.idventa}`} className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition shadow-sm" title="Editar">✏️</Link>
+                        )}
                       </div>
                     </td>
                   </tr>
