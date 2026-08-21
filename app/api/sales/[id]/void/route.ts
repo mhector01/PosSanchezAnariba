@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireAdminRole } from '@/lib/auth';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    if (!(await requireAdminRole())) {
+        return NextResponse.json({ error: 'No tienes permiso para anular ventas' }, { status: 403 });
+    }
     const { id } = await params;
     const connection = await pool.getConnection();
     
