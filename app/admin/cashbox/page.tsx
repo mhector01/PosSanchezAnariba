@@ -11,8 +11,11 @@ import {
   CheckCircle,
   AlertTriangle
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function CashboxPage() {
+  const { user } = useAuth();
+  const isAdmin = Number(user?.tipo_usuario) === 1;
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<any>(null);
   const [movements, setMovements] = useState<any[]>([]);
@@ -207,7 +210,7 @@ export default function CashboxPage() {
             </button>
             
             {/* BOTONES DE ACCIÓN: Solo si la caja está abierta */}
-            {isBoxOpen ? (
+            {isAdmin && (isBoxOpen ? (
                 <>
                     <button onClick={() => { setModalType('out'); setShowModal(true); }} className="bg-rose-100 text-rose-700 hover:bg-rose-200 px-5 py-3 rounded-xl font-bold flex items-center gap-2 transition">
                         <ArrowDownCircle className="w-5 h-5" /> Gasto
@@ -220,7 +223,7 @@ export default function CashboxPage() {
                 <button disabled className="bg-slate-100 text-slate-400 px-5 py-3 rounded-xl font-bold flex items-center gap-2 cursor-not-allowed">
                     <Lock className="w-5 h-5" /> Turno Cerrado
                 </button>
-            )}
+            ))}
         </div>
       </div>
 
@@ -259,12 +262,19 @@ export default function CashboxPage() {
             </div>
             
             {/* Tarjeta de Acción Principal */}
-            {isBoxOpen ? (
+            {isBoxOpen && isAdmin ? (
                 <div className="bg-indigo-600 p-6 rounded-3xl shadow-lg shadow-indigo-200 text-white relative overflow-hidden group cursor-pointer hover:scale-[1.02] transition-transform" onClick={() => initiateClose(summary.idcaja)}>
                     <div className="absolute right-0 top-0 p-4 opacity-10"><Wallet className="w-16 h-16" /></div>
                     <p className="text-xs font-bold text-indigo-200 uppercase mb-1">Total Esperado</p>
                     <h3 className="text-3xl font-black">L. {(Number(summary.p_monto_inicial || 0) + Number(summary.p_ingresos_total || 0) - Number(summary.p_egresos || 0)).toFixed(2)}</h3>
                     <div className="mt-2 text-xs font-bold bg-white text-indigo-600 inline-block px-3 py-1 rounded-full shadow-sm animate-pulse">Cerrar Turno Ahora</div>
+                </div>
+            ) : isBoxOpen ? (
+                <div className="bg-indigo-600 p-6 rounded-3xl shadow-lg shadow-indigo-200 text-white relative overflow-hidden">
+                    <div className="absolute right-0 top-0 p-4 opacity-10"><Wallet className="w-16 h-16" /></div>
+                    <p className="text-xs font-bold text-indigo-200 uppercase mb-1">Total Esperado</p>
+                    <h3 className="text-3xl font-black">L. {(Number(summary.p_monto_inicial || 0) + Number(summary.p_ingresos_total || 0) - Number(summary.p_egresos || 0)).toFixed(2)}</h3>
+                    <div className="mt-2 text-xs font-bold text-indigo-100">Solo consulta</div>
                 </div>
             ) : (
                 <div className="bg-slate-800 p-6 rounded-3xl shadow-lg text-white cursor-pointer hover:bg-slate-700 transition" onClick={() => handleReprint(summary)}>
@@ -314,7 +324,7 @@ export default function CashboxPage() {
                                   )}
                               </td>
                               <td className="p-4 text-center">
-                                  {box.estado === 1 ? (
+                                  {box.estado === 1 && isAdmin ? (
                                       <button onClick={() => initiateClose(box.idcaja)} className="text-rose-600 hover:bg-rose-50 px-3 py-1 rounded border border-rose-200 text-xs font-bold transition">
                                           Cerrar
                                       </button>
@@ -332,7 +342,7 @@ export default function CashboxPage() {
       </div>
 
       {/* --- MODAL INGRESO / GASTO --- */}
-      {showModal && (
+      {showModal && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in zoom-in print:hidden">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
                 <h3 className="font-bold text-xl text-slate-800 mb-1">Registrar {modalType === 'in' ? 'Ingreso' : 'Gasto'}</h3>
@@ -349,7 +359,7 @@ export default function CashboxPage() {
       )}
 
       {/* --- MODAL CIERRE DE CAJA --- */}
-      {showCloseModal && (
+      {showCloseModal && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in zoom-in print:hidden">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center relative">
                 <div className="mb-6"><h2 className="text-2xl font-black text-slate-800">Cerrar Caja #{closingBoxId}</h2></div>
