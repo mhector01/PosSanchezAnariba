@@ -692,11 +692,9 @@ export default function POS() {
           <div className="flex gap-3">
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold">{user.name.charAt(0)}</div><div className="text-sm"><p className="font-bold text-slate-700">{user.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{user.tipo_usuario === 1 ? 'Administrador' : 'Vendedor'}</p></div></div>
              
-             {userRole === 1 && (
-                 <button onClick={() => router.push('/admin')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95" title="Ir al Dashboard">
-                    <LayoutDashboard className="w-5 h-5" /> <span className="hidden xl:inline text-sm">Dashboard</span>
-                 </button>
-             )}
+             <button onClick={() => router.push('/admin')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95" title="Ir al Panel Administrativo">
+                <LayoutDashboard className="w-5 h-5" /> <span className="hidden xl:inline text-sm">Panel Admin</span>
+             </button>
 
              <button onClick={() => { checkRegisterStatus().then(() => { setCashAmount(''); setShowCloseModal(true); }); }} className="bg-slate-800 hover:bg-slate-900 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-slate-200 transition-all active:scale-95" title="Corte de Caja"><span>🔒</span> <span className="hidden xl:inline text-sm">Cerrar Caja</span></button>
              <button onClick={onLogoutClick} className="bg-white border-2 border-rose-100 text-rose-500 hover:bg-rose-50 hover:border-rose-200 px-4 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95" title="Salir"><span>🚪</span></button>

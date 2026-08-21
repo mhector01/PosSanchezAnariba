@@ -23,7 +23,27 @@ export async function middleware(request: NextRequest) {
   if (token) {
     try {
       const secret = new TextEncoder().encode('CLAVE_SECRETA_SUPER_SEGURA_CAMBIAME');
-      await jwtVerify(token, secret);
+      const { payload } = await jwtVerify(token, secret);
+      const role = Number(payload.role);
+
+      // Los cajeros pueden consultar el panel, pero no entrar en pantallas
+      // administrativas que crean o modifican información.
+      if (role === 2 && path.startsWith('/admin')) {
+        const cashierAllowedPaths = [
+          '/admin',
+          '/admin/sales',
+          '/admin/products',
+          '/admin/cashbox',
+        ];
+        const isAllowed = cashierAllowedPaths.some(
+          allowedPath => path === allowedPath || path.startsWith(`${allowedPath}/`)
+        );
+        const isSaleEdit = path.startsWith('/admin/sales/edit/');
+
+        if (!isAllowed || isSaleEdit) {
+          return NextResponse.redirect(new URL('/admin', request.url));
+        }
+      }
 
       // Si el token es válido y estamos en Login, mandar al POS (ya está logueado)
       if (isPublicPath) {

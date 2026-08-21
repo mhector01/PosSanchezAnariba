@@ -16,7 +16,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Lista de menús con roles definidos
   const allItems = [
-    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, adminOnly: true },
+    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, adminOnly: false },
     { name: 'Historial Ventas', href: '/admin/sales', icon: ReceiptText, adminOnly: false },
     { name: 'Productos', href: '/admin/products', icon: Package, adminOnly: false },
     { name: 'Reportes', href: '/admin/reports', icon: BarChart3, adminOnly: true },
@@ -44,6 +44,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
     );
   }
+
+  const isCashier = Number(user?.tipo_usuario) === 2;
 
   return (
     <div className="flex h-screen bg-[#f8fafc] overflow-hidden">
@@ -199,6 +201,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* ÁREA DE CONTENIDO DINÁMICO (AQUÍ APLICAMOS LA CLASE content-scroll) */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 content-scroll">
             <div className="max-w-7xl mx-auto">
+               {isCashier && (
+                 <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                   Acceso de consulta: puedes revisar la información, pero no editar ni eliminar registros.
+                 </div>
+               )}
                {children}
             </div>
         </div>

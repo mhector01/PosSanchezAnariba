@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireAdminRole } from '@/lib/auth';
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireAdminRole())) {
+    return NextResponse.json({ error: 'No tienes permiso para editar ventas' }, { status: 403 });
+  }
   // 1. Desempaquetar la promesa de params (Requerido en Next.js 15)
   const { id } = await params;
   const body = await request.json();

@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { requireAdminRole } from '@/lib/auth';
 
 export async function POST(request: Request) {
+  if (!(await requireAdminRole())) {
+    return NextResponse.json({ error: 'No tienes permiso para ajustar inventario' }, { status: 403 });
+  }
   try {
     const { idproducto, cantidad_sistema, cantidad_real, motivo, idusuario } = await request.json();
     
