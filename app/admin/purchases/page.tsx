@@ -8,13 +8,15 @@ export default function PurchasesPage() {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   
   // Datos del Encabezado
   const [header, setHeader] = useState({
     idproveedor: '',
     numero_comprobante: '',
     fecha_comprobante: new Date().toISOString().split('T')[0],
-    tipo_pago: 'Contado'
+    tipo_pago: 'Contado',
+    idbodega: ''
   });
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +24,7 @@ export default function PurchasesPage() {
   useEffect(() => {
     // Cargar proveedores
     fetch('/api/providers').then(r => r.json()).then(setProviders);
+    fetch('/api/warehouses').then(r => r.json()).then(d => setWarehouses(Array.isArray(d) ? d : []));
   }, []);
 
   // Buscar productos
@@ -71,6 +74,7 @@ export default function PurchasesPage() {
 
   const handleSave = async () => {
     if(!header.idproveedor) return alert("Seleccione un proveedor");
+    if(!header.idbodega) return alert("Seleccione la bodega que recibirá la compra");
     if(!header.numero_comprobante) return alert("Ingrese número de factura");
     if(cart.length === 0) return alert("No hay productos");
 
@@ -122,12 +126,19 @@ export default function PurchasesPage() {
         </div>
 
         {/* FORMULARIO ENCABEZADO */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="col-span-1 md:col-span-2">
                 <label className="block text-xs font-bold text-slate-500 mb-1">Proveedor</label>
                 <select className="w-full p-3 border rounded-xl bg-slate-50" value={header.idproveedor} onChange={e => setHeader({...header, idproveedor: e.target.value})}>
                     <option value="">-- Seleccionar --</option>
                     {providers.map(p => <option key={p.idproveedor} value={p.idproveedor}>{p.nombre_proveedor}</option>)}
+                </select>
+            </div>
+            <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Bodega destino</label>
+                <select className="w-full p-3 border rounded-xl bg-slate-50" value={header.idbodega} onChange={e => setHeader({...header, idbodega: e.target.value})}>
+                    <option value="">-- Seleccionar --</option>
+                    {warehouses.map(b => <option key={b.idbodega} value={b.idbodega}>{b.nombre}</option>)}
                 </select>
             </div>
             <div>

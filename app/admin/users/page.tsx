@@ -14,13 +14,18 @@ interface UsuarioView {
   telefono?: string;
   email?: string;
   contrasena?: string; // Solo para envío
+  idbodega?: number | null;
+  bodega_nombre?: string;
 }
+
+interface Bodega { idbodega: number; nombre: string; }
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UsuarioView[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [warehouses, setWarehouses] = useState<Bodega[]>([]);
 
   // Formulario completo (Empleado + Usuario)
   const initialForm = {
@@ -32,12 +37,14 @@ export default function UsersPage() {
       email: '',
       usuario: '',
       password: '',
-      tipo_usuario: 2
+      tipo_usuario: 2,
+      idbodega: 0
   };
   const [form, setForm] = useState(initialForm);
 
   useEffect(() => {
     fetchUsers();
+    fetch('/api/warehouses').then(r => r.json()).then(d => setWarehouses(Array.isArray(d) ? d : []));
   }, []);
 
   const fetchUsers = async () => {
@@ -92,7 +99,8 @@ export default function UsersPage() {
         email: '',
         usuario: u.usuario,
         password: '', // Limpio por seguridad
-        tipo_usuario: u.tipo_usuario
+        tipo_usuario: u.tipo_usuario,
+        idbodega: u.idbodega || 0
     });
     setIsEditing(true);
     setShowModal(true);
@@ -128,6 +136,7 @@ export default function UsersPage() {
               <th className="p-5">Empleado</th>
               <th className="p-5">Credenciales</th>
               <th className="p-5 text-center">Rol</th>
+              <th className="p-5">Bodega</th>
               <th className="p-5 text-center">Acciones</th>
             </tr>
           </thead>
@@ -152,6 +161,7 @@ export default function UsersPage() {
                     {u.tipo_usuario === 1 ? 'ADMINISTRADOR' : 'CAJERO'}
                   </span>
                 </td>
+                <td className="p-5 text-slate-600 font-semibold">{u.tipo_usuario === 1 ? 'Todas las bodegas' : (u.bodega_nombre || 'Sin asignar')}</td>
                 <td className="p-5 text-center flex justify-center gap-2">
                   <button onClick={() => openEdit(u)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"><Pencil className="w-4 h-4" /></button>
                   <button onClick={() => handleDelete(u.idusuario)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition"><Trash2 className="w-4 h-4" /></button>
@@ -197,6 +207,16 @@ export default function UsersPage() {
                         <input type="email" className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 transition" 
                           value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
                       </div>
+                      {form.tipo_usuario !== 1 && (
+                        <div className="col-span-2">
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Bodega asignada *</label>
+                          <select required value={form.idbodega} onChange={e => setForm({...form, idbodega: Number(e.target.value)})}
+                            className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500">
+                            <option value={0}>Seleccionar bodega</option>
+                            {warehouses.map(b => <option key={b.idbodega} value={b.idbodega}>{b.nombre}</option>)}
+                          </select>
+                        </div>
+                      )}
                   </div>
               </div>
 

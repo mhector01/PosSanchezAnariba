@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
-const SECRET_KEY = new TextEncoder().encode('CLAVE_SECRETA_SUPER_SEGURA_CAMBIAME');
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) throw new Error('JWT_SECRET no está configurado');
+const SECRET_KEY = new TextEncoder().encode(jwtSecret);
 
 export async function getSessionRole(): Promise<number | null> {
   const token = (await cookies()).get('session_token')?.value;
@@ -10,6 +12,27 @@ export async function getSessionRole(): Promise<number | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET_KEY);
     return Number(payload.role);
+  } catch {
+    return null;
+  }
+}
+
+export interface AppSession {
+  id: number;
+  role: number;
+  warehouseId: number | null;
+}
+
+export async function getSession(): Promise<AppSession | null> {
+  const token = (await cookies()).get('session_token')?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, SECRET_KEY);
+    return {
+      id: Number(payload.id),
+      role: Number(payload.role),
+      warehouseId: payload.warehouseId ? Number(payload.warehouseId) : null,
+    };
   } catch {
     return null;
   }

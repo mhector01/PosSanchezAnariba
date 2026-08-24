@@ -133,7 +133,7 @@ CLOUDINARY_CLOUD_NAME=tu_cloud
 CLOUDINARY_API_KEY=tu_api_key
 CLOUDINARY_API_SECRET=tu_api_secret
 
-# JWT (opcional — si no se define usa un valor por defecto)
+# JWT (obligatorio; use una cadena aleatoria larga)
 JWT_SECRET=clave_secreta_segura
 ```
 

@@ -8,8 +8,10 @@ export async function GET() {
     const connection = await pool.getConnection();
     // Tu vista 'view_usuarios' ya trae todo lo necesario
     const [rows] = await connection.query(`
-      SELECT * FROM view_usuarios 
-      WHERE estado = 1 
+      SELECT vu.*, u.idbodega, b.nombre AS bodega_nombre FROM view_usuarios vu
+      JOIN usuario u ON u.idusuario=vu.idusuario
+      LEFT JOIN bodega b ON b.idbodega=u.idbodega
+      WHERE vu.estado = 1
       ORDER BY idusuario DESC
     `);
     connection.release();
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { 
         nombre_empleado, apellido_empleado, telefono, email, // Datos Empleado
-        usuario, password, tipo_usuario // Datos Usuario
+        usuario, password, tipo_usuario, idbodega
     } = body;
 
     const connection = await pool.getConnection();
@@ -50,9 +52,9 @@ export async function POST(request: Request) {
         // 3. Insertar Usuario vinculado al Empleado (Encriptar contraseña)
         const hashedPassword = await bcrypt.hash(password, 10);
         await connection.query(
-            `INSERT INTO usuario (usuario, contrasena, tipo_usuario, estado, idempleado) 
-             VALUES (?, ?, ?, 1, ?)`,
-            [usuario, hashedPassword, tipo_usuario, idEmpleado]
+            `INSERT INTO usuario (usuario, contrasena, tipo_usuario, estado, idempleado, idbodega)
+             VALUES (?, ?, ?, 1, ?, ?)`,
+            [usuario, hashedPassword, tipo_usuario, idEmpleado, Number(tipo_usuario) === 1 ? null : idbodega]
         );
 
         await connection.commit();
@@ -77,7 +79,7 @@ export async function PUT(request: Request) {
     const { 
         idusuario, idempleado, // IDs necesarios
         nombre_empleado, apellido_empleado, telefono, email,
-        usuario, password, tipo_usuario 
+        usuario, password, tipo_usuario, idbodega
     } = body;
 
     const connection = await pool.getConnection();
@@ -93,8 +95,8 @@ export async function PUT(request: Request) {
         );
 
         // 2. Actualizar Usuario
-        let queryUsuario = `UPDATE usuario SET usuario = ?, tipo_usuario = ?`;
-        let paramsUsuario: any[] = [usuario, tipo_usuario];
+        let queryUsuario = `UPDATE usuario SET usuario = ?, tipo_usuario = ?, idbodega = ?`;
+        let paramsUsuario: any[] = [usuario, tipo_usuario, Number(tipo_usuario) === 1 ? null : idbodega];
 
         // Solo actualizamos contraseña si enviaron una nueva (Encriptar contraseña)
         if (password && password.trim() !== "") {
