@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import { getSession } from '@/lib/auth';
 
 // ---------------------------------------------------------------------
 // 1. GET: OBTENER HISTORIAL DE VENTAS
@@ -80,16 +81,20 @@ export async function GET(request: Request) {
 // ---------------------------------------------------------------------
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     const body = await request.json();
     const { 
       cart, total, tipo_pago, pago_efectivo,
-      id_cliente, notas = '', id_usuario, id_comprobante 
+      id_cliente, notas = '', id_usuario, id_comprobante, idbodega
     } = body;
 
     if (!cart || cart.length === 0) {
         return NextResponse.json({ error: 'El carrito está vacío' }, { status: 400 });
     }
 
+    const warehouseId = session.role === 1 ? Number(idbodega || session.warehouseId) : session.warehouseId;
+    if (!warehouseId) return NextResponse.json({ error: 'Debes seleccionar una bodega' }, { status: 400 });
     const connection = await pool.getConnection();
 
     try {
@@ -129,6 +134,13 @@ export async function POST(request: Request) {
 
       // Insertar Detalles
       for (const item of cart) {
+         const [stockRows]: any = await connection.query(
+           'SELECT stock FROM bodega_producto WHERE idbodega=? AND idproducto=? FOR UPDATE',
+           [warehouseId, item.idproducto]
+         );
+         if (!stockRows.length || Number(stockRows[0].stock) < Number(item.cantidad)) {
+           throw new Error(`Existencia insuficiente en la bodega para ${item.nombre_producto || item.idproducto}`);
+         }
          const fechaVencimiento = item.fecha_vencimiento || null; 
 
          // Llamada a sp_insert_detalleventa (7 Parámetros)
@@ -143,7 +155,13 @@ export async function POST(request: Request) {
               (item.cantidad * item.precio_numerico)
            ]
          );
+         await connection.query(
+           'UPDATE bodega_producto SET stock=stock-? WHERE idbodega=? AND idproducto=?',
+           [item.cantidad, warehouseId, item.idproducto]
+         );
       }
+
+      await connection.query('UPDATE venta SET idbodega=? WHERE idventa=?', [warehouseId, idVenta]);
 
       // Finalizar venta
       await connection.query('CALL sp_finalizar_venta(?)', [idVenta]);

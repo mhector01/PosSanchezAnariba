@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { requireAdminRole } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 
 // 1. GET: Search Products (Updated to include subcategory)
 export async function GET(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q') || '';
     const page = parseInt(searchParams.get('page') || '1');
@@ -16,8 +19,12 @@ export async function GET(request: Request) {
 
     // Base query updated to JOIN with category, subcategory, brand, and presentation
     // Nota: p.* ya trae la columna 'imagen' si existe en la tabla
+    const requestedWarehouse = Number(searchParams.get('warehouseId')) || session.warehouseId;
+    if (session.role !== 1 && requestedWarehouse !== session.warehouseId) {
+      return NextResponse.json({ error: 'No tienes acceso a esa bodega' }, { status: 403 });
+    }
     let query = `
-      SELECT p.*, 
+      SELECT p.*, COALESCE(bp.stock, p.stock) AS stock,
              c.nombre_categoria, 
              sc.nombre_subcategoria, -- <--- Nombre de Subcategoría
              m.nombre_marca, 
@@ -27,10 +34,11 @@ export async function GET(request: Request) {
       LEFT JOIN subcategoria sc ON p.idsubcategoria = sc.idsubcategoria -- <--- JOIN con Subcategoría
       LEFT JOIN marca m ON p.idmarca = m.idmarca
       LEFT JOIN presentacion pr ON p.idpresentacion = pr.idpresentacion
+      LEFT JOIN bodega_producto bp ON bp.idproducto=p.idproducto AND bp.idbodega=?
     `;
     
     let countQuery = 'SELECT COUNT(*) as total FROM producto p';
-    let params: any[] = [];
+    let params: any[] = [requestedWarehouse];
 
     if (q) {
       const term = `%${q}%`;
@@ -42,13 +50,14 @@ export async function GET(request: Request) {
       `;
       query += where;
       countQuery += where;
-      params = [term, term, term, term];
+      params.push(term, term, term, term);
     }
 
     query += ' ORDER BY p.idproducto DESC LIMIT ? OFFSET ?';
     
     // Get total count for pagination
-    const [countRows] = await connection.query<RowDataPacket[]>(countQuery, params);
+    const countParams = q ? params.slice(1) : [];
+    const [countRows] = await connection.query<RowDataPacket[]>(countQuery, countParams);
     const total = countRows[0].total;
 
     // Execute main query
@@ -96,6 +105,7 @@ export async function POST(request: Request) {
     } = body;
 
     const connection = await pool.getConnection();
+    await connection.beginTransaction();
     
     // Duplicate validation (Barcode)
     if (codigo_barra) {
@@ -146,6 +156,15 @@ export async function POST(request: Request) {
       ]
     );
 
+    const initialStock = Number(stock || 0);
+    if (initialStock > 0) {
+      const [warehouses]: any = await connection.query('SELECT idbodega FROM bodega WHERE principal=1 LIMIT 1');
+      if (warehouses.length) await connection.query(
+        'INSERT INTO bodega_producto(idbodega,idproducto,stock) VALUES (?,?,?)',
+        [warehouses[0].idbodega, res.insertId, initialStock]
+      );
+    }
+    await connection.commit();
     connection.release();
     return NextResponse.json({ success: true, id: res.insertId });
 
@@ -186,7 +205,9 @@ export async function PUT(request: Request) {
     }
 
     const connection = await pool.getConnection();
-    
+    await connection.beginTransaction();
+    const [previous]: any = await connection.query('SELECT stock FROM producto WHERE idproducto=? FOR UPDATE', [idproducto]);
+
     await connection.query(
       `UPDATE producto SET 
         codigo_barra=?, 
@@ -225,6 +246,19 @@ export async function PUT(request: Request) {
       ]
     );
 
+    const difference = Number(stock) - Number(previous[0]?.stock || 0);
+    if (difference !== 0) {
+      const [principal]: any = await connection.query('SELECT idbodega FROM bodega WHERE principal=1 LIMIT 1');
+      if (principal.length) {
+        await connection.query(
+          `INSERT INTO bodega_producto(idbodega,idproducto,stock) VALUES (?,?,?)
+           ON DUPLICATE KEY UPDATE stock=stock+?`,
+          [principal[0].idbodega, idproducto, Math.max(0, difference), difference]
+        );
+      }
+    }
+
+    await connection.commit();
     connection.release();
     return NextResponse.json({ success: true });
 

@@ -22,7 +22,9 @@ export async function middleware(request: NextRequest) {
   // B. Si hay token, verificar si es válido
   if (token) {
     try {
-      const secret = new TextEncoder().encode('CLAVE_SECRETA_SUPER_SEGURA_CAMBIAME');
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) return NextResponse.redirect(new URL('/login', request.url));
+      const secret = new TextEncoder().encode(jwtSecret);
       const { payload } = await jwtVerify(token, secret);
       const role = Number(payload.role);
 

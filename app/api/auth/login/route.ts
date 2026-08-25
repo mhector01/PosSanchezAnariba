@@ -5,7 +5,9 @@ import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { RowDataPacket } from 'mysql2';
 
-const SECRET_KEY = new TextEncoder().encode('CLAVE_SECRETA_SUPER_SEGURA_CAMBIAME');
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) throw new Error('JWT_SECRET no está configurado');
+const SECRET_KEY = new TextEncoder().encode(jwtSecret);
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +16,13 @@ export async function POST(request: Request) {
 
     // 1. Usamos 'view_usuarios' del SQL proporcionado para obtener datos completos
     const [rows] = await connection.query<RowDataPacket[]>(
-      'SELECT * FROM view_usuarios WHERE usuario = ?', 
+      `SELECT vu.*, COALESCE(u.idbodega, bp.idbodega) AS idbodega,
+              COALESCE(b.nombre, bp.nombre) AS bodega_nombre
+       FROM view_usuarios vu
+       JOIN usuario u ON u.idusuario=vu.idusuario
+       LEFT JOIN bodega b ON b.idbodega=u.idbodega
+       LEFT JOIN bodega bp ON bp.principal=1
+       WHERE vu.usuario = ?`,
       [username]
     );
     
@@ -33,7 +41,9 @@ export async function POST(request: Request) {
       id: user.idusuario, 
       username: user.usuario,
       name: `${user.nombre_empleado} ${user.apellido_empleado}`, // Dato de view_usuarios
-      role: user.tipo_usuario // 1: Admin, 2: Gerente
+      role: user.tipo_usuario,
+      warehouseId: user.idbodega,
+      warehouseName: user.bodega_nombre
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setExpirationTime('8h')

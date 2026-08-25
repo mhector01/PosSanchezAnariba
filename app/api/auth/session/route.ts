@@ -3,7 +3,9 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
 // ASEGÚRATE DE QUE ESTA CLAVE SEA LA MISMA QUE EN TU LOGIN
-const SECRET_KEY = new TextEncoder().encode('CLAVE_SECRETA_SUPER_SEGURA_CAMBIAME');
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) throw new Error('JWT_SECRET no está configurado');
+const SECRET_KEY = new TextEncoder().encode(jwtSecret);
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -23,7 +25,9 @@ export async function GET() {
         id: payload.id,
         username: payload.username,
         name: payload.name,
-        tipo_usuario: payload.role // <--- ESTO ACTIVA LA EDICIÓN DE PRECIOS
+        tipo_usuario: payload.role,
+        idbodega: payload.warehouseId || null,
+        bodega_nombre: payload.warehouseName || null
       }
     });
   } catch (error) {

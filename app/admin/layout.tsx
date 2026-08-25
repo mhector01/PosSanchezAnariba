@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, ReceiptText, Package, Store, LogOut, 
   Menu, X, ChevronRight, UserCircle, BarChart3, 
-  ShoppingCart, Wallet, Settings, Users 
+  ShoppingCart, Wallet, Settings, Users, Warehouse
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -23,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Compras', href: '/admin/purchases', icon: ShoppingCart, adminOnly: true },
     { name: 'Caja', href: '/admin/cashbox', icon: Wallet, adminOnly: false },
     { name: 'Usuarios', href: '/admin/users', icon: Users, adminOnly: true },
+    { name: 'Bodegas', href: '/admin/warehouses', icon: Warehouse, adminOnly: false },
     { name: 'Configuración', href: '/admin/settings', icon: Settings, adminOnly: true },
   ];
 

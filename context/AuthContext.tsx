@@ -24,7 +24,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userData = {
             idusuario: data.user.id || data.user.idusuario,
             nombre: data.user.name || data.user.nombre,
-            tipo_usuario: data.user.tipo_usuario
+            tipo_usuario: data.user.tipo_usuario,
+            idbodega: data.user.idbodega,
+            bodega_nombre: data.user.bodega_nombre
         };
         setUser(userData);
         localStorage.setItem('pos_user', JSON.stringify(userData));

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { ResultSetHeader } from 'mysql2';
+import { getSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session || session.role !== 1) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
   const connection = await pool.getConnection();
   try {
     const body = await request.json();
@@ -12,10 +15,11 @@ export async function POST(request: Request) {
       fecha_comprobante, 
       tipo_pago, // 'Contado' o 'Credito'
       cart, 
-      total 
+      total, idbodega
     } = body;
 
     if (!cart || cart.length === 0) return NextResponse.json({ error: 'Carrito vacío' }, { status: 400 });
+    if (!idbodega) return NextResponse.json({ error: 'Selecciona la bodega que recibirá la compra' }, { status: 400 });
 
     await connection.beginTransaction();
 
@@ -37,6 +41,7 @@ export async function POST(request: Request) {
     );
 
     const idCompra = resCompra.insertId;
+    await connection.query('UPDATE compra SET idbodega=? WHERE idcompra=?', [idbodega, idCompra]);
 
     // 2. PROCESAR CADA PRODUCTO
     for (const item of cart) {
@@ -50,6 +55,11 @@ export async function POST(request: Request) {
             `INSERT INTO detallecompra (idcompra, idproducto, fecha_vence, cantidad, precio_unitario, exento, importe)
              VALUES (?, ?, ?, ?, ?, 0, ?)`,
             [idCompra, item.idproducto, vence, cantidad, costo, importe]
+        );
+        await connection.query(
+          `INSERT INTO bodega_producto(idbodega,idproducto,stock) VALUES (?,?,?)
+           ON DUPLICATE KEY UPDATE stock=stock+VALUES(stock)`,
+          [idbodega, item.idproducto, cantidad]
         );
 
         // B. Actualizar Producto (Stock y Nuevo Costo)
