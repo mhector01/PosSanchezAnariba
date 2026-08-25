@@ -1,6 +1,7 @@
 -- Multi-bodega para Grupo Sanchez Anariba POS.
--- Ejecutar una sola vez antes de desplegar la version de la aplicacion.
-START TRANSACTION;
+-- Compatible con versiones que no soportan ADD COLUMN/INDEX IF NOT EXISTS.
+-- Es idempotente: se puede volver a ejecutar si una ejecución anterior quedó incompleta.
+SET @db := DATABASE();
 
 CREATE TABLE IF NOT EXISTS bodega (
   idbodega INT NOT NULL AUTO_INCREMENT,
@@ -17,8 +18,19 @@ INSERT INTO bodega (nombre, descripcion, principal, estado)
 SELECT 'Bodega principal', 'Inventario existente al habilitar multi-bodega', 1, 1
 WHERE NOT EXISTS (SELECT 1 FROM bodega);
 
-ALTER TABLE usuario ADD COLUMN IF NOT EXISTS idbodega INT NULL;
-ALTER TABLE usuario ADD INDEX IF NOT EXISTS ix_usuario_bodega (idbodega);
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='usuario' AND COLUMN_NAME='idbodega'),
+  'SELECT 1',
+  'ALTER TABLE usuario ADD COLUMN idbodega INT NULL'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='usuario' AND INDEX_NAME='ix_usuario_bodega'),
+  'SELECT 1',
+  'ALTER TABLE usuario ADD INDEX ix_usuario_bodega (idbodega)'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS bodega_producto (
   idbodega INT NOT NULL,
@@ -71,13 +83,53 @@ CREATE TABLE IF NOT EXISTS transferencia_bodega_detalle (
   CONSTRAINT ck_transferencia_cantidad CHECK (cantidad > 0)
 ) ENGINE=InnoDB;
 
-ALTER TABLE venta ADD COLUMN IF NOT EXISTS idbodega INT NULL;
-ALTER TABLE compra ADD COLUMN IF NOT EXISTS idbodega INT NULL;
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='venta' AND COLUMN_NAME='idbodega'),
+  'SELECT 1',
+  'ALTER TABLE venta ADD COLUMN idbodega INT NULL'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='compra' AND COLUMN_NAME='idbodega'),
+  'SELECT 1',
+  'ALTER TABLE compra ADD COLUMN idbodega INT NULL'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 UPDATE venta SET idbodega = @bodega_principal WHERE idbodega IS NULL;
 UPDATE compra SET idbodega = @bodega_principal WHERE idbodega IS NULL;
 
-ALTER TABLE usuario ADD CONSTRAINT fk_usuario_bodega FOREIGN KEY (idbodega) REFERENCES bodega(idbodega);
-ALTER TABLE venta ADD INDEX ix_venta_bodega (idbodega), ADD CONSTRAINT fk_venta_bodega FOREIGN KEY (idbodega) REFERENCES bodega(idbodega);
-ALTER TABLE compra ADD INDEX ix_compra_bodega (idbodega), ADD CONSTRAINT fk_compra_bodega FOREIGN KEY (idbodega) REFERENCES bodega(idbodega);
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=@db AND TABLE_NAME='usuario' AND CONSTRAINT_NAME='fk_usuario_bodega'),
+  'SELECT 1',
+  'ALTER TABLE usuario ADD CONSTRAINT fk_usuario_bodega FOREIGN KEY (idbodega) REFERENCES bodega(idbodega)'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-COMMIT;
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='venta' AND INDEX_NAME='ix_venta_bodega'),
+  'SELECT 1',
+  'ALTER TABLE venta ADD INDEX ix_venta_bodega (idbodega)'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=@db AND TABLE_NAME='venta' AND CONSTRAINT_NAME='fk_venta_bodega'),
+  'SELECT 1',
+  'ALTER TABLE venta ADD CONSTRAINT fk_venta_bodega FOREIGN KEY (idbodega) REFERENCES bodega(idbodega)'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='compra' AND INDEX_NAME='ix_compra_bodega'),
+  'SELECT 1',
+  'ALTER TABLE compra ADD INDEX ix_compra_bodega (idbodega)'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS(SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=@db AND TABLE_NAME='compra' AND CONSTRAINT_NAME='fk_compra_bodega'),
+  'SELECT 1',
+  'ALTER TABLE compra ADD CONSTRAINT fk_compra_bodega FOREIGN KEY (idbodega) REFERENCES bodega(idbodega)'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
