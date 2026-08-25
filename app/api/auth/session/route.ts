@@ -3,9 +3,11 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
 // ASEGÚRATE DE QUE ESTA CLAVE SEA LA MISMA QUE EN TU LOGIN
-const jwtSecret = process.env.JWT_SECRET;
-if (!jwtSecret) throw new Error('JWT_SECRET no está configurado');
-const SECRET_KEY = new TextEncoder().encode(jwtSecret);
+function getSecretKey() {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error('JWT_SECRET no está configurado');
+  return new TextEncoder().encode(jwtSecret);
+}
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -17,7 +19,7 @@ export async function GET() {
   }
 
   try {
-    const { payload } = await jwtVerify(token.value, SECRET_KEY);
+    const { payload } = await jwtVerify(token.value, getSecretKey());
     
     // Devolvemos el rol al frontend
     return NextResponse.json({

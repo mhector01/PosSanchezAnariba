@@ -5,9 +5,11 @@ import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { RowDataPacket } from 'mysql2';
 
-const jwtSecret = process.env.JWT_SECRET;
-if (!jwtSecret) throw new Error('JWT_SECRET no está configurado');
-const SECRET_KEY = new TextEncoder().encode(jwtSecret);
+function getSecretKey() {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error('JWT_SECRET no está configurado');
+  return new TextEncoder().encode(jwtSecret);
+}
 
 export async function POST(request: Request) {
   try {
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setExpirationTime('8h')
-      .sign(SECRET_KEY);
+      .sign(getSecretKey());
 
     // 4. Guardar Cookie
     const cookieStore = await cookies();
