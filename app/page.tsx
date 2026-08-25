@@ -62,6 +62,8 @@ export default function POS() {
 
   const [user, setUser] = useState<any>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<number>(0);
 
   const [isRegisterOpen, setIsRegisterOpen] = useState<boolean | null>(null);
   const [registerDetails, setRegisterDetails] = useState<any>(null);
@@ -132,11 +134,14 @@ export default function POS() {
       .then(data => {
         const userData = data.user;
         setUser(userData);
+        setSelectedWarehouse(Number(userData.idbodega || 0));
         
         const sessionData = {
             idusuario: userData.id,
             nombre: userData.name,
-            tipo_usuario: userData.tipo_usuario
+            tipo_usuario: userData.tipo_usuario,
+            idbodega: userData.idbodega,
+            bodega_nombre: userData.bodega_nombre
         };
         localStorage.setItem('pos_user', JSON.stringify(sessionData));
         setAuthUser(sessionData);
@@ -145,6 +150,11 @@ export default function POS() {
         checkRegisterStatus();
         fetchCustomers();
         fetchCatalogs();
+        if (Number(userData.tipo_usuario) === 1) {
+          fetch('/api/warehouses')
+            .then(res => res.json())
+            .then(data => setWarehouses(Array.isArray(data) ? data : []));
+        }
         
         fetch('/api/settings/comprobantes')
           .then(res => res.json())
@@ -182,7 +192,7 @@ export default function POS() {
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [search, isRegisterOpen]);
+  }, [search, isRegisterOpen, selectedWarehouse]);
 
   useEffect(() => {
       if (allProducts.length > 0) {
@@ -268,7 +278,8 @@ export default function POS() {
   const fetchProducts = async (term: string, pageNum: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/products?q=${term}&page=${pageNum}&limit=100`);
+      const warehouseParam = selectedWarehouse ? `&warehouseId=${selectedWarehouse}` : '';
+      const res = await fetch(`/api/products?q=${term}&page=${pageNum}&limit=100${warehouseParam}`);
       const data = await res.json();
       const list = data.data || data; 
       if (Array.isArray(list)) {
@@ -360,7 +371,8 @@ export default function POS() {
         if (products.length === 1) targetProduct = products[0];
         else {
             try {
-                const res = await fetch(`/api/products?q=${search}&limit=5`); 
+                const warehouseParam = selectedWarehouse ? `&warehouseId=${selectedWarehouse}` : '';
+                const res = await fetch(`/api/products?q=${search}&limit=5${warehouseParam}`);
                 const data = await res.json();
                 const found = Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
                 const exactMatch = found.find((p: Producto) => p.codigo_barra === search);
@@ -436,7 +448,8 @@ export default function POS() {
           id_cliente: paymentForm.idCliente,
           notas: paymentForm.notas,
           id_usuario: user?.id,
-          id_comprobante: paymentForm.idComprobante
+          id_comprobante: paymentForm.idComprobante,
+          idbodega: selectedWarehouse
         })
       });
       const data = await res.json();
@@ -690,6 +703,28 @@ export default function POS() {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3.5"><div className="w-14 h-14 bg-white p-1 rounded-xl shadow-sm border border-slate-100 flex items-center justify-center shrink-0"><img src="/logo.png" alt="Logo Grupo Sánchez Anariba" className="w-full h-full object-contain" /></div><div className="flex flex-col"><h1 className="text-xl font-black text-slate-800 tracking-tight">Grupo Sánchez Anariba <span className="text-indigo-600">POS</span></h1><p className="text-xs text-slate-400 font-medium">Panel de Venta</p></div></div>
           <div className="flex gap-3">
+             {user.tipo_usuario === 1 && (
+               <select
+                 value={selectedWarehouse}
+                 onChange={(e) => {
+                   const nextWarehouse = Number(e.target.value);
+                   if (nextWarehouse === selectedWarehouse) return;
+                   setSelectedWarehouse(nextWarehouse);
+                   setCart([]);
+                   setSearch('');
+                   setSelectedCat(0);
+                   setSelectedSubCat(0);
+                   setPage(1);
+                 }}
+                 className="bg-white border border-indigo-200 text-slate-700 px-4 py-2 rounded-xl font-bold shadow-sm outline-none focus:ring-4 focus:ring-indigo-500/10"
+                 title="Bodega utilizada para consultar y descontar inventario"
+               >
+                 <option value={0}>Seleccionar bodega</option>
+                 {warehouses.map((warehouse) => (
+                   <option key={warehouse.idbodega} value={warehouse.idbodega}>{warehouse.nombre}</option>
+                 ))}
+               </select>
+             )}
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold">{user.name.charAt(0)}</div><div className="text-sm"><p className="font-bold text-slate-700">{user.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{user.tipo_usuario === 1 ? 'Administrador' : 'Vendedor'}</p></div></div>
              
              <button onClick={() => router.push('/admin')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95" title="Ir al Panel Administrativo">
